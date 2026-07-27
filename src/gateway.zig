@@ -2775,7 +2775,7 @@ fn initLocalAgentRuntime(
     const subagent_manager = allocator.create(subagent_mod.SubagentManager) catch null;
     errdefer if (subagent_manager) |mgr| allocator.destroy(mgr);
     if (subagent_manager) |mgr| {
-        mgr.* = subagent_mod.SubagentManager.init(allocator, cfg, event_bus, .{});
+        mgr.* = subagent_mod.SubagentManager.init(allocator, cfg, event_bus, cfg.subagent);
         mgr.observer = runtime_observer.backendObserver();
         mgr.task_runner = subagent_runner.runTaskWithTools;
         errdefer mgr.deinit();

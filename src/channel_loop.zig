@@ -1296,7 +1296,7 @@ pub const ChannelRuntime = struct {
         const subagent_manager = allocator.create(subagent_mod.SubagentManager) catch null;
         errdefer if (subagent_manager) |mgr| allocator.destroy(mgr);
         if (subagent_manager) |mgr| {
-            mgr.* = subagent_mod.SubagentManager.init(allocator, config, null, .{});
+            mgr.* = subagent_mod.SubagentManager.init(allocator, config, null, config.subagent);
             mgr.task_runner = subagent_runner.runTaskWithTools;
             errdefer {
                 mgr.deinit();
@@ -2611,7 +2611,7 @@ test "polling subagent drain delivers only matching origin account" {
         .config_path = "/tmp/yc/config.json",
         .allocator = allocator,
     };
-    var mgr = subagent_mod.SubagentManager.init(allocator, &cfg, null, .{});
+    var mgr = subagent_mod.SubagentManager.init(allocator, &cfg, null, cfg.subagent);
     defer mgr.deinit();
 
     const signal_state = try allocator.create(subagent_mod.TaskState);

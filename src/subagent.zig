@@ -48,10 +48,7 @@ pub const CompletionNotice = struct {
     origin_account_id: ?[]u8 = null,
 };
 
-pub const SubagentConfig = struct {
-    max_iterations: u32 = 15,
-    max_concurrent: u32 = 4,
-};
+pub const SubagentConfig = config_types.SubagentConfig;
 
 pub const TaskRunRequest = struct {
     task: []const u8,

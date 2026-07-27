@@ -403,6 +403,11 @@ pub const QueueMode = enum {
     }
 };
 
+pub const SubagentConfig = struct {
+    max_iterations: u32 = 15,
+    max_concurrent: u32 = 4,
+};
+
 pub const AgentConfig = struct {
     /// When true (default), history is auto-compacted once it crosses the
     /// token / message thresholds. Set to false to skip proactive LLM

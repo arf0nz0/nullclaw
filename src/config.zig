@@ -245,6 +245,7 @@ pub const Config = struct {
     security: SecurityConfig = .{},
     tools: ToolsConfig = .{},
     session: SessionConfig = .{},
+    subagent: config_types.SubagentConfig = .{},
 
     // Convenience aliases for backward-compat flat access used by other modules.
     // These are set during load() to mirror nested values.

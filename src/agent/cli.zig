@@ -545,7 +545,7 @@ pub fn run(allocator: std.mem.Allocator, args: []const [:0]const u8) !void {
     else
         runtime_provider.?.primaryApiKey();
 
-    var subagent_manager = subagent_mod.SubagentManager.init(allocator, &cfg, null, .{});
+    var subagent_manager = subagent_mod.SubagentManager.init(allocator, &cfg, null, cfg.subagent);
     subagent_manager.observer = runtime_observer.backendObserver();
     subagent_manager.task_runner = subagent_runner.runTaskWithTools;
     defer subagent_manager.deinit();
