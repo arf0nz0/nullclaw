@@ -76,6 +76,16 @@ pub const TaskRunRequest = struct {
     allow_raw_url_chars: bool,
     configured_providers: []const config_types.ProviderEntry,
     observer: ?observability.Observer = null,
+    // Extra tool support
+    extra_tools_enabled: bool = false,
+    extra_native_tools: []const []const u8 = &.{},
+    all_mcp_configs: []const config_types.McpServerConfig = &.{},
+    subagent_mcp_allowlist: []const []const u8 = &.{},
+    web_search_base_url: ?[]const u8 = null,
+    web_search_provider: []const u8 = "auto",
+    web_search_fallback_providers: []const []const u8 = &.{},
+    browser_enabled: bool = false,
+    screenshot_enabled: bool = false,
 };
 
 pub const TaskRunnerFn = *const fn (allocator: Allocator, request: TaskRunRequest) anyerror![]const u8;
@@ -127,6 +137,17 @@ pub const SubagentManager = struct {
     observer: ?observability.Observer = null,
     task_runner: ?TaskRunnerFn = null,
 
+    // Extra tool support
+    all_mcp_configs: []const config_types.McpServerConfig = &.{},
+    extra_tools_enabled: bool = false,
+    extra_native_tools: []const []const u8 = &.{},
+    subagent_mcp_allowlist: []const []const u8 = &.{},
+    web_search_base_url: ?[]const u8 = null,
+    web_search_provider: []const u8 = "auto",
+    web_search_fallback_providers: []const []const u8 = &.{},
+    browser_enabled: bool = false,
+    screenshot_enabled: bool = false,
+
     pub fn init(
         allocator: Allocator,
         cfg: *const config_mod.Config,
@@ -162,6 +183,15 @@ pub const SubagentManager = struct {
             .http_timeout_secs = cfg.http_request.timeout_secs,
             .tools_config = cfg.tools,
             .memory_config = cfg.memory,
+            .all_mcp_configs = cfg.mcp_servers,
+            .extra_tools_enabled = subagent_config.extra_tools_enabled,
+            .extra_native_tools = subagent_config.extra_native_tools,
+            .subagent_mcp_allowlist = subagent_config.mcp_servers,
+            .web_search_base_url = cfg.http_request.search_base_url,
+            .web_search_provider = cfg.http_request.search_provider,
+            .web_search_fallback_providers = cfg.http_request.search_fallback_providers,
+            .browser_enabled = cfg.browser.enabled,
+            .screenshot_enabled = true,
         };
     }
 
@@ -630,6 +660,15 @@ fn subagentThreadFn(ctx: *ThreadContext) void {
             .allow_raw_url_chars = ctx.manager.allow_raw_url_chars,
             .configured_providers = ctx.manager.configured_providers,
             .observer = ctx.manager.observer,
+            .extra_tools_enabled = ctx.manager.extra_tools_enabled,
+            .extra_native_tools = ctx.manager.extra_native_tools,
+            .all_mcp_configs = ctx.manager.all_mcp_configs,
+            .subagent_mcp_allowlist = ctx.manager.subagent_mcp_allowlist,
+            .web_search_base_url = ctx.manager.web_search_base_url,
+            .web_search_provider = ctx.manager.web_search_provider,
+            .web_search_fallback_providers = ctx.manager.web_search_fallback_providers,
+            .browser_enabled = ctx.manager.browser_enabled,
+            .screenshot_enabled = ctx.manager.screenshot_enabled,
         };
 
         const result = runner(ctx.manager.allocator, request) catch |err| {

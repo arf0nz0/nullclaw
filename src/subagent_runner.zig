@@ -101,6 +101,32 @@ pub fn runTaskWithTools(
         .tools_config = request.tools_config,
         .bootstrap_provider = bootstrap_provider,
         .backend_name = request.memory_config.backend,
+        .extra_tools_enabled = request.extra_tools_enabled,
+        .extra_native_tools = request.extra_native_tools,
+        .mcp_server_configs = blk: {
+            if (!request.extra_tools_enabled or request.subagent_mcp_allowlist.len == 0) break :blk &.{};
+            var filtered: std.ArrayListUnmanaged(config_types.McpServerConfig) = .empty;
+            defer filtered.deinit(allocator);
+            for (request.all_mcp_configs) |mcp_cfg| {
+                for (request.subagent_mcp_allowlist) |allowed| {
+                    if (std.mem.eql(u8, mcp_cfg.name, allowed)) {
+                        filtered.append(allocator, mcp_cfg) catch break;
+                        break;
+                    }
+                }
+            }
+            break :blk filtered.toOwnedSlice(allocator) catch &.{};
+        },
+        .web_search_base_url = request.web_search_base_url,
+        .web_search_provider = request.web_search_provider,
+        .web_search_fallback_providers = request.web_search_fallback_providers,
+        .browser_enabled = request.browser_enabled,
+        .screenshot_enabled = request.screenshot_enabled,
+        .agents = null,
+        .configured_providers = request.configured_providers,
+        .fallback_api_key = request.api_key,
+        .delegate_depth = 0,
+        .subagent_manager = null,
     });
     defer tools_mod.deinitTools(allocator, tools);
 

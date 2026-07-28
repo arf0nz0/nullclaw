@@ -676,6 +676,19 @@ pub fn subagentTools(
         tools_config: @import("../config.zig").ToolsConfig = .{},
         bootstrap_provider: ?bootstrap_mod.BootstrapProvider = null,
         backend_name: []const u8 = "hybrid",
+        extra_tools_enabled: bool = false,
+        extra_native_tools: []const []const u8 = &.{},
+        mcp_server_configs: []const @import("../config_types.zig").McpServerConfig = &.{},
+        web_search_base_url: ?[]const u8 = null,
+        web_search_provider: []const u8 = "auto",
+        web_search_fallback_providers: []const []const u8 = &.{},
+        browser_enabled: bool = false,
+        screenshot_enabled: bool = false,
+        agents: ?[]const @import("../config.zig").NamedAgentConfig = null,
+        configured_providers: []const @import("../config_types.zig").ProviderEntry = &.{},
+        fallback_api_key: ?[]const u8 = null,
+        delegate_depth: u32 = 0,
+        subagent_manager: ?*@import("../subagent.zig").SubagentManager = null,
     },
 ) ![]Tool {
     var list: std.ArrayList(Tool) = .empty;
@@ -775,6 +788,154 @@ pub fn subagentTools(
             .timeout_secs = opts.http_timeout_secs,
         };
         try list.append(allocator, ht.tool());
+    }
+
+    // ── Extra tools (opt-in via subagent config) ──
+    if (opts.extra_tools_enabled) {
+        const has_wildcard = blk: {
+            for (opts.extra_native_tools) |t| {
+                if (std.mem.eql(u8, t, "*")) break :blk true;
+            }
+            break :blk false;
+        };
+
+        const isRequested = struct {
+            fn call(names: []const []const u8, name: []const u8, wildcard: bool) bool {
+                if (wildcard) return true;
+                for (names) |n| if (std.mem.eql(u8, n, name)) return true;
+                return false;
+            }
+        }.call;
+
+        // image_info
+        if (isRequested(opts.extra_native_tools, "image_info", has_wildcard)) {
+            const it = try allocator.create(image.ImageInfoTool);
+            it.* = .{};
+            try list.append(allocator, it.tool());
+        }
+        // calculator
+        if (isRequested(opts.extra_native_tools, "calculator", has_wildcard)) {
+            const calt = try allocator.create(calculator.CalculatorTool);
+            calt.* = .{};
+            try list.append(allocator, calt.tool());
+        }
+        // sqlite_query
+        if (isRequested(opts.extra_native_tools, "sqlite_query", has_wildcard)) {
+            const sqt = try allocator.create(sqlite_query.SqliteQueryTool);
+            sqt.* = .{ .workspace_dir = workspace_dir, .allowed_paths = opts.allowed_paths };
+            try list.append(allocator, sqt.tool());
+        }
+        // anonymize_text
+        if (isRequested(opts.extra_native_tools, "anonymize_text", has_wildcard)) {
+            const ant = try allocator.create(anonymize_text.AnonymizeTextTool);
+            ant.* = .{};
+            try list.append(allocator, ant.tool());
+        }
+        // memory_store
+        if (isRequested(opts.extra_native_tools, "memory_store", has_wildcard)) {
+            const mst = try allocator.create(memory_store.MemoryStoreTool);
+            mst.* = .{};
+            try list.append(allocator, mst.tool());
+        }
+        // memory_recall
+        if (isRequested(opts.extra_native_tools, "memory_recall", has_wildcard)) {
+            const mrt = try allocator.create(memory_recall.MemoryRecallTool);
+            mrt.* = .{};
+            try list.append(allocator, mrt.tool());
+        }
+        // memory_list
+        if (isRequested(opts.extra_native_tools, "memory_list", has_wildcard)) {
+            const mlt = try allocator.create(memory_list.MemoryListTool);
+            mlt.* = .{};
+            try list.append(allocator, mlt.tool());
+        }
+        // memory_forget
+        if (isRequested(opts.extra_native_tools, "memory_forget", has_wildcard)) {
+            const mft = try allocator.create(memory_forget.MemoryForgetTool);
+            mft.* = .{};
+            try list.append(allocator, mft.tool());
+        }
+        // delegate
+        if (isRequested(opts.extra_native_tools, "delegate", has_wildcard)) {
+            const dlt = try allocator.create(delegate.DelegateTool);
+            dlt.* = .{
+                .agents = opts.agents orelse &.{},
+                .configured_providers = opts.configured_providers,
+                .fallback_api_key = opts.fallback_api_key,
+                .depth = opts.delegate_depth,
+            };
+            try list.append(allocator, dlt.tool());
+        }
+        // schedule
+        if (isRequested(opts.extra_native_tools, "schedule", has_wildcard)) {
+            const scht = try allocator.create(schedule.ScheduleTool);
+            scht.* = .{};
+            try list.append(allocator, scht.tool());
+        }
+        // spawn
+        if (isRequested(opts.extra_native_tools, "spawn", has_wildcard)) {
+            if (opts.subagent_manager) |mgr| {
+                const sp = try allocator.create(spawn.SpawnTool);
+                sp.* = .{ .manager = mgr };
+                try list.append(allocator, sp.tool());
+            }
+        }
+        // HTTP-gated tools
+        if (opts.http_enabled) {
+            // pushover
+            if (isRequested(opts.extra_native_tools, "pushover", has_wildcard)) {
+                const pt = try allocator.create(pushover.PushoverTool);
+                pt.* = .{ .workspace_dir = workspace_dir };
+                try list.append(allocator, pt.tool());
+            }
+            // web_search
+            if (isRequested(opts.extra_native_tools, "web_search", has_wildcard)) {
+                const wst = try allocator.create(web_search.WebSearchTool);
+                wst.* = .{
+                    .searxng_base_url = opts.web_search_base_url,
+                    .provider = opts.web_search_provider,
+                    .fallback_providers = opts.web_search_fallback_providers,
+                    .timeout_secs = opts.http_timeout_secs,
+                };
+                try list.append(allocator, wst.tool());
+            }
+            // web_fetch
+            if (isRequested(opts.extra_native_tools, "web_fetch", has_wildcard)) {
+                const wft = try allocator.create(web_fetch.WebFetchTool);
+                wft.* = .{
+                    .default_max_chars = tc.web_fetch_max_chars,
+                    .allowed_domains = opts.http_allowed_domains,
+                };
+                try list.append(allocator, wft.tool());
+            }
+        }
+        // browser
+        if (opts.browser_enabled) {
+            if (isRequested(opts.extra_native_tools, "browser", has_wildcard)) {
+                const bt = try allocator.create(browser.BrowserTool);
+                bt.* = .{};
+                try list.append(allocator, bt.tool());
+            }
+        }
+        // screenshot
+        if (opts.screenshot_enabled) {
+            if (isRequested(opts.extra_native_tools, "screenshot", has_wildcard)) {
+                const sst = try allocator.create(screenshot.ScreenshotTool);
+                sst.* = .{ .workspace_dir = workspace_dir };
+                try list.append(allocator, sst.tool());
+            }
+        }
+        // MCP tools
+        if (opts.mcp_server_configs.len > 0) {
+            const mcp_tools = mcp_mod.initMcpTools(allocator, opts.mcp_server_configs) catch |err| blk: {
+                std.log.warn("subagentTools: MCP init failed: {}", .{err});
+                break :blk &[_]Tool{};
+            };
+            defer allocator.free(mcp_tools);
+            for (mcp_tools) |t| {
+                try list.append(allocator, t);
+            }
+        }
     }
 
     applyToolCustomizations(allocator, &list, opts.tools_config.tool_customizations);

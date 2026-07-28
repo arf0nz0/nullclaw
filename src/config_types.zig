@@ -406,6 +406,9 @@ pub const QueueMode = enum {
 pub const SubagentConfig = struct {
     max_iterations: u32 = 15,
     max_concurrent: u32 = 4,
+    extra_tools_enabled: bool = false,
+    extra_native_tools: []const []const u8 = &.{},
+    mcp_servers: []const []const u8 = &.{},
 };
 
 pub const AgentConfig = struct {

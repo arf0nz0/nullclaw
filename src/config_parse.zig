@@ -1838,6 +1838,15 @@ pub fn parseJson(self: *Config, content: []const u8) !void {
             if (sg.object.get("max_concurrent")) |v| {
                 if (v == .integer) self.subagent.max_concurrent = @intCast(v.integer);
             }
+            if (sg.object.get("extra_tools_enabled")) |v| {
+                if (v == .bool) self.subagent.extra_tools_enabled = v.bool;
+            }
+            if (sg.object.get("extra_native_tools")) |v| {
+                if (v == .array) self.subagent.extra_native_tools = try parseStringArray(self.allocator, v.array);
+            }
+            if (sg.object.get("mcp_servers")) |v| {
+                if (v == .array) self.subagent.mcp_servers = try parseStringArray(self.allocator, v.array);
+            }
         }
     }
 
