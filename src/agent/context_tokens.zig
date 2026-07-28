@@ -38,6 +38,14 @@ const MODEL_WINDOWS = [_]ContextWindowEntry{
     .{ .key = "deepseek-v3.2", .tokens = 128_000 },
     .{ .key = "deepseek-chat", .tokens = 128_000 },
     .{ .key = "deepseek-reasoner", .tokens = 128_000 },
+    .{ .key = "glm-5.2", .tokens = 1_048_576 },
+    .{ .key = "glm-5.1", .tokens = 200_000 },
+    .{ .key = "glm-5", .tokens = 200_000 },
+    .{ .key = "glm-5-turbo", .tokens = 200_000 },
+    .{ .key = "glm-4.7", .tokens = 200_000 },
+    .{ .key = "glm-4.6", .tokens = 200_000 },
+    .{ .key = "glm-4.5", .tokens = 128_000 },
+    .{ .key = "glm-4-32b-0414-128k", .tokens = 128_000 },
     .{ .key = "llama-4-70b-instruct", .tokens = 128_000 },
     .{ .key = "llama-3.3-70b-versatile", .tokens = 128_000 },
     .{ .key = "llama-3.1-8b-instant", .tokens = 128_000 },
@@ -60,6 +68,7 @@ const PROVIDER_WINDOWS = [_]ContextWindowEntry{
     .{ .key = "qianfan", .tokens = 98_304 },
     .{ .key = "novita", .tokens = 128_000 },
     .{ .key = "nvidia", .tokens = 131_072 },
+    .{ .key = "zai", .tokens = 200_000 },
 };
 
 fn startsWithIgnoreCase(haystack: []const u8, prefix: []const u8) bool {
@@ -138,6 +147,7 @@ fn inferFromModelPattern(model_id: []const u8) ?u64 {
     }
 
     if (startsWithIgnoreCase(model_id, "gemini-")) return 200_000;
+    if (startsWithIgnoreCase(model_id, "glm-")) return 200_000;
     if (startsWithIgnoreCase(model_id, "deepseek-")) return 128_000;
     if (startsWithIgnoreCase(model_id, "llama") or startsWithIgnoreCase(model_id, "mixtral-")) return 128_000;
 
