@@ -107,6 +107,26 @@ pub fn migrateOpenclawWithPolicy(
     readBrainDbEntries(allocator, source, &entries, &stats, &seen_keys);
 
     if (dry_run) {
+        // Simulate import without writing — count what would happen
+        var mem_rt = memory_root.initRuntime(allocator, &.{ .backend = config.memory_backend }, config.workspace_dir) orelse
+            return error.TargetMemoryOpenFailed;
+        defer mem_rt.deinit();
+        var mem = mem_rt.memory;
+
+        for (entries.items) |entry| {
+            if (mem.get(allocator, entry.key) catch null) |existing| {
+                var e = existing;
+                defer e.deinit(allocator);
+                if (contentEqual(existing.content, entry.content)) {
+                    stats.skipped_unchanged += 1;
+                } else {
+                    // Would be renamed (default policy is rename_conflicts)
+                    stats.renamed_conflicts += 1;
+                }
+            } else {
+                stats.imported += 1;
+            }
+        }
         stats.config_migrated = try migrateOpenclawConfig(allocator, source, config.config_path, true);
         return stats;
     }

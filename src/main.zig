@@ -1696,7 +1696,7 @@ fn runMigrate(allocator: std.mem.Allocator, sub_args: []const []const u8) !void 
         if (dry_run) {
             std.debug.print("[DRY RUN] ", .{});
         }
-        std.debug.print("Migration complete: {d} imported, {d} skipped\n", .{ stats.imported, stats.skipped_unchanged });
+        std.debug.print("Migration complete: {d} imported, {d} skipped, {d} renamed\n", .{ stats.imported, stats.skipped_unchanged, stats.renamed_conflicts });
         if (stats.config_migrated) {
             if (dry_run) {
                 std.debug.print("[DRY RUN] Config migration preview: ~/.openclaw/config.json -> {s}\n", .{cfg.config_path});
