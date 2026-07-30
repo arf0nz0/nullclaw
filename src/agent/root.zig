@@ -265,6 +265,9 @@ pub const Agent = struct {
     redactor: ?*redaction.Redactor = null,
     /// Optional session scope for memory read/write operations.
     memory_session_id: ?[]const u8 = null,
+    parent_session_hash: ?u64 = null,
+    context_label: ?[]const u8 = null,
+    parent_context_label: ?[]const u8 = null,
     observer: Observer,
     model_name: []const u8,
     model_name_owned: bool = false,
@@ -2732,8 +2735,11 @@ pub const Agent = struct {
             const batch_updates_tools_md = tool_call_batch_updates_tools_md(arena, parsed_calls);
 
             const session_hash: u64 = if (self.memory_session_id) |sid| std.hash.Wyhash.hash(0, sid) else 0;
+            const parent_hash: u64 = self.parent_session_hash orelse 0;
+            const ctx_label: []const u8 = self.context_label orelse "main";
+            const parent_ctx_label: []const u8 = self.parent_context_label orelse "main";
             if (self.log_tool_calls) {
-                log.info("tool-call batch session=0x{x} count={d}", .{ session_hash, parsed_calls.len });
+                log.info("tool-call batch session={s}:0x{x} parent={s}:0x{x} count={d}", .{ ctx_label, session_hash, parent_ctx_label, parent_hash, parsed_calls.len });
             }
 
             for (parsed_calls, 0..) |call, idx| {
@@ -2744,8 +2750,8 @@ pub const Agent = struct {
 
                 if (self.log_tool_calls) {
                     log.info(
-                        "tool-call start session=0x{x} index={d} name={s} id={s}",
-                        .{ session_hash, idx + 1, call.name, call.tool_call_id orelse "-" },
+                        "tool-call start session={s}:0x{x} parent={s}:0x{x} index={d} name={s} id={s}",
+                        .{ ctx_label, session_hash, parent_ctx_label, parent_hash, idx + 1, call.name, call.tool_call_id orelse "-" },
                     );
                 }
 
@@ -2781,8 +2787,8 @@ pub const Agent = struct {
 
                 if (self.log_tool_calls) {
                     log.info(
-                        "tool-call done session=0x{x} index={d} name={s} success={} duration_ms={d}",
-                        .{ session_hash, idx + 1, call.name, result.success, tool_duration },
+                        "tool-call done session={s}:0x{x} parent={s}:0x{x} index={d} name={s} success={} duration_ms={d}",
+                        .{ ctx_label, session_hash, parent_ctx_label, parent_hash, idx + 1, call.name, result.success, tool_duration },
                     );
                 }
 
@@ -3465,10 +3471,16 @@ pub const Agent = struct {
         defer arena_state.deinit();
         const arena = arena_state.allocator();
         const session_hash: u64 = if (self.memory_session_id) |sid| std.hash.Wyhash.hash(0, sid) else 0;
+        const parent_hash: u64 = self.parent_session_hash orelse 0;
+        const ctx_label: []const u8 = self.context_label orelse "main";
+        const parent_ctx_label: []const u8 = self.parent_context_label orelse "main";
         log.info(
-            "llm request session=0x{x} iter={d} attempt={d} provider={s} model={s} messages={d} native_tools={} streaming={}",
+            "llm request session={s}:0x{x} parent={s}:0x{x} iter={d} attempt={d} provider={s} model={s} messages={d} native_tools={} streaming={} reasoning_mode={s} reasoning_effort={s}",
             .{
+                ctx_label,
                 session_hash,
+                parent_ctx_label,
+                parent_hash,
                 iteration,
                 attempt,
                 self.provider.getName(),
@@ -3476,6 +3488,8 @@ pub const Agent = struct {
                 messages.len,
                 native_tools_enabled,
                 is_streaming,
+                self.reasoning_mode.toSlice(),
+                self.reasoning_effort orelse "off",
             },
         );
         for (messages, 0..) |msg, idx| {
@@ -3483,9 +3497,12 @@ pub const Agent = struct {
             const preview = llmLogPreview(safe_content);
             const parts_count: usize = if (msg.content_parts) |parts| parts.len else 0;
             log.info(
-                "llm request msg session=0x{x} iter={d} attempt={d} index={d} role={s} bytes={d} parts={d} content={f}{s}",
+                "llm request msg session={s}:0x{x} parent={s}:0x{x} iter={d} attempt={d} index={d} role={s} bytes={d} parts={d} content={f}{s}",
                 .{
+                    ctx_label,
                     session_hash,
+                    parent_ctx_label,
+                    parent_hash,
                     iteration,
                     attempt,
                     idx + 1,
@@ -3505,15 +3522,21 @@ pub const Agent = struct {
         defer arena_state.deinit();
         const arena = arena_state.allocator();
         const session_hash: u64 = if (self.memory_session_id) |sid| std.hash.Wyhash.hash(0, sid) else 0;
+        const parent_hash: u64 = self.parent_session_hash orelse 0;
+        const ctx_label: []const u8 = self.context_label orelse "main";
+        const parent_ctx_label: []const u8 = self.parent_context_label orelse "main";
         const content = response.contentOrEmpty();
         const safe_content = self.diagnosticText(arena, content);
         const preview = llmLogPreview(safe_content);
         const reasoning_returned = response.reasoning_content != null and response.reasoning_content.?.len > 0;
         const reasoning_requested = self.reasoning_mode != .off;
         log.info(
-            "llm response session=0x{x} iter={d} attempt={d} provider={s} model={s} bytes={d} tool_calls={d} reasoning_mode={s} reasoning_effort={s} reasoning_requested={} reasoning_returned={} usage={f} content={f}{s}",
+            "llm response session={s}:0x{x} parent={s}:0x{x} iter={d} attempt={d} provider={s} model={s} bytes={d} tool_calls={d} reasoning_mode={s} reasoning_effort={s} reasoning_requested={} reasoning_returned={} usage={f} content={f}{s}",
             .{
+                ctx_label,
                 session_hash,
+                parent_ctx_label,
+                parent_hash,
                 iteration,
                 attempt,
                 self.effectiveProvider(response),
@@ -3534,9 +3557,12 @@ pub const Agent = struct {
         // log emission here would require a log sink harness for Agent runtime logging.
         if (reasoning_requested and !reasoning_returned) {
             log.info(
-                "llm response reasoning missing session=0x{x} iter={d} attempt={d} provider={s} model={s} reasoning_mode={s} reasoning_effort={s}",
+                "llm response reasoning missing session={s}:0x{x} parent={s}:0x{x} iter={d} attempt={d} provider={s} model={s} reasoning_mode={s} reasoning_effort={s}",
                 .{
+                    ctx_label,
                     session_hash,
+                    parent_ctx_label,
+                    parent_hash,
                     iteration,
                     attempt,
                     self.effectiveProvider(response),
@@ -3551,9 +3577,12 @@ pub const Agent = struct {
             const safe_reasoning = self.diagnosticText(arena, reasoning);
             const r_preview = llmLogPreview(safe_reasoning);
             log.info(
-                "llm response reasoning session=0x{x} iter={d} attempt={d} bytes={d} content={f}{s}",
+                "llm response reasoning session={s}:0x{x} parent={s}:0x{x} iter={d} attempt={d} bytes={d} content={f}{s}",
                 .{
+                    ctx_label,
                     session_hash,
+                    parent_ctx_label,
+                    parent_hash,
                     iteration,
                     attempt,
                     reasoning.len,
@@ -3567,9 +3596,12 @@ pub const Agent = struct {
             const safe_args = self.diagnosticText(arena, tc.arguments);
             const args_preview = llmLogPreview(safe_args);
             log.info(
-                "llm response tool-call session=0x{x} iter={d} attempt={d} index={d} id={s} name={s} args={f}{s}",
+                "llm response tool-call session={s}:0x{x} parent={s}:0x{x} iter={d} attempt={d} index={d} id={s} name={s} args={f}{s}",
                 .{
+                    ctx_label,
                     session_hash,
+                    parent_ctx_label,
+                    parent_hash,
                     iteration,
                     attempt,
                     idx + 1,

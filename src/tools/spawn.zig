@@ -13,11 +13,12 @@ pub const SpawnTool = struct {
     default_account_id: ?[]const u8 = null,
     default_chat_id: ?[]const u8 = null,
     default_session_key: ?[]const u8 = null,
+    default_context_label: ?[]const u8 = null,
 
     pub const tool_name = "spawn";
     pub const tool_description = "Spawn a background subagent to work on a task asynchronously. Returns a task ID immediately. Results are delivered as follow-up messages when complete.";
     pub const tool_params =
-        \\{"type":"object","properties":{"task":{"type":"string","minLength":1,"description":"The task/prompt for the subagent"},"label":{"type":"string","description":"Optional human-readable label for tracking"},"agent":{"type":"string","description":"Optional named agent profile from agents.list for provider/model override"}},"required":["task"]}
+        \\{"type":"object","properties":{"task":{"type":"string","minLength":1,"description":"The task/prompt for the subagent"},"label":{"type":"string","description":"Optional human-readable label for tracking"},"agent":{"type":"string","description":"Optional named agent profile from agents.list for provider/model override"},"reasoning_effort":{"type":"string","description":"Optional thinking level for this subagent. Validated against provider config valid_reasoning_efforts at runtime. Omit to use config default."}},"required":["task"]}
     ;
 
     const vtable = root.ToolVTable(@This());
@@ -39,6 +40,7 @@ pub const SpawnTool = struct {
         }
 
         const label = root.getString(args, "label") orelse "subagent";
+        const reasoning_effort = root.getString(args, "reasoning_effort");
         const agent_name = if (root.getString(args, "agent")) |raw| blk: {
             const trimmed = std.mem.trim(u8, raw, " \t\n");
             if (trimmed.len == 0) {
@@ -55,7 +57,13 @@ pub const SpawnTool = struct {
         const chat_id = self.default_chat_id orelse "agent";
         const session_key = self.default_session_key orelse chat_id;
 
-        const task_id = manager.spawnWithAgent(trimmed_task, label, channel, chat_id, account_id, session_key, agent_name) catch |err| {
+        const parent_session_hash = if (session_key.len > 0)
+            std.hash.Wyhash.hash(0, session_key)
+        else
+            0;
+
+        const parent_context_label = self.default_context_label;
+        const task_id = manager.spawnWithAgent(trimmed_task, label, channel, chat_id, account_id, session_key, agent_name, reasoning_effort, parent_session_hash, parent_context_label) catch |err| {
             return switch (err) {
                 error.TooManyConcurrentSubagents => ToolResult.fail("Too many concurrent subagents. Wait for some to complete."),
                 error.UnknownAgent => ToolResult.fail("Unknown named agent profile"),

@@ -86,6 +86,11 @@ pub const TaskRunRequest = struct {
     web_search_fallback_providers: []const []const u8 = &.{},
     browser_enabled: bool = false,
     screenshot_enabled: bool = false,
+    reasoning_effort: ?[]const u8 = null,
+    parent_session_hash: u64 = 0,
+    context_label: ?[]const u8 = null,
+    parent_context_label: ?[]const u8 = null,
+    diagnostics: config_types.DiagnosticsConfig = .{},
 };
 
 pub const TaskRunnerFn = *const fn (allocator: Allocator, request: TaskRunRequest) anyerror![]const u8;
@@ -98,6 +103,9 @@ const ThreadContext = struct {
     task: []const u8,
     label: []const u8,
     agent_name: ?[]const u8 = null,
+    reasoning_effort: ?[]const u8 = null,
+    parent_session_hash: u64 = 0,
+    parent_context_label: ?[]const u8 = null,
     trace_id: ?[32]u8 = null,
 };
 
@@ -147,6 +155,7 @@ pub const SubagentManager = struct {
     web_search_fallback_providers: []const []const u8 = &.{},
     browser_enabled: bool = false,
     screenshot_enabled: bool = false,
+    diagnostics: config_types.DiagnosticsConfig = .{},
 
     pub fn init(
         allocator: Allocator,
@@ -192,6 +201,7 @@ pub const SubagentManager = struct {
             .web_search_fallback_providers = cfg.http_request.search_fallback_providers,
             .browser_enabled = cfg.browser.enabled,
             .screenshot_enabled = true,
+            .diagnostics = cfg.diagnostics,
         };
     }
 
@@ -225,7 +235,7 @@ pub const SubagentManager = struct {
         origin_account_id: ?[]const u8,
         origin_session_key: []const u8,
     ) !u64 {
-        return self.spawnWithAgent(task, label, origin_channel, origin_chat_id, origin_account_id, origin_session_key, null);
+        return self.spawnWithAgent(task, label, origin_channel, origin_chat_id, origin_account_id, origin_session_key, null, null, 0);
     }
 
     /// Spawn a background subagent using an optional named agent profile.
@@ -239,6 +249,9 @@ pub const SubagentManager = struct {
         origin_account_id: ?[]const u8,
         origin_session_key: []const u8,
         agent_name: ?[]const u8,
+        reasoning_effort: ?[]const u8,
+        parent_session_hash: u64,
+        parent_context_label: ?[]const u8,
     ) !u64 {
         self.mutex.lock();
         defer self.mutex.unlock();
@@ -284,6 +297,8 @@ pub const SubagentManager = struct {
         errdefer self.allocator.free(label_copy);
         const agent_name_copy = if (agent_name) |name| try self.allocator.dupe(u8, name) else null;
         errdefer if (agent_name_copy) |name| self.allocator.free(name);
+        const reasoning_effort_copy = if (reasoning_effort) |effort| try self.allocator.dupe(u8, effort) else null;
+        errdefer if (reasoning_effort_copy) |effort| self.allocator.free(effort);
 
         const trace_id = if (self.observer) |obs| obs.getTraceId() else null;
 
@@ -296,6 +311,9 @@ pub const SubagentManager = struct {
             .task = task_copy,
             .label = label_copy,
             .agent_name = agent_name_copy,
+            .reasoning_effort = reasoning_effort_copy,
+            .parent_session_hash = parent_session_hash,
+            .parent_context_label = parent_context_label,
             .trace_id = trace_id,
         };
 
@@ -574,6 +592,7 @@ fn subagentThreadFn(ctx: *ThreadContext) void {
         ctx.manager.allocator.free(ctx.task);
         ctx.manager.allocator.free(ctx.label);
         if (ctx.agent_name) |agent_name| ctx.manager.allocator.free(agent_name);
+        if (ctx.reasoning_effort) |effort| ctx.manager.allocator.free(effort);
         ctx.manager.allocator.destroy(ctx);
     }
 
@@ -669,6 +688,11 @@ fn subagentThreadFn(ctx: *ThreadContext) void {
             .web_search_fallback_providers = ctx.manager.web_search_fallback_providers,
             .browser_enabled = ctx.manager.browser_enabled,
             .screenshot_enabled = ctx.manager.screenshot_enabled,
+            .reasoning_effort = ctx.reasoning_effort,
+            .parent_session_hash = ctx.parent_session_hash,
+            .context_label = ctx.label,
+            .parent_context_label = ctx.parent_context_label,
+            .diagnostics = ctx.manager.diagnostics,
         };
 
         const result = runner(ctx.manager.allocator, request) catch |err| {
@@ -1131,7 +1155,7 @@ test "SubagentManager spawnWithAgent rejects unknown agent" {
 
     try std.testing.expectError(
         error.UnknownAgent,
-        mgr.spawnWithAgent("quick task", "session-check", "agent", "session:42", null, "session:42", "missing-agent"),
+        mgr.spawnWithAgent("quick task", "session-check", "agent", "session:42", null, "session:42", "missing-agent", null, 0),
     );
 }
 
@@ -1150,7 +1174,7 @@ test "SubagentManager spawnWithAgent accepts configured agent" {
     var mgr = SubagentManager.init(std.testing.allocator, &cfg, null, .{});
     defer mgr.deinit();
 
-    const task_id = try mgr.spawnWithAgent("quick task", "session-check", "agent", "session:42", null, "session:42", "researcher");
+    const task_id = try mgr.spawnWithAgent("quick task", "session-check", "agent", "session:42", null, "session:42", "researcher", null, 0);
     try std.testing.expect(task_id > 0);
 }
 
@@ -1181,7 +1205,7 @@ test "SubagentManager uses named agent workspace_path for task runner" {
     mgr.task_runner = testTaskRunnerWorkspace;
     defer mgr.deinit();
 
-    const task_id = try mgr.spawnWithAgent("quick task", "workspace-check", "agent", "session:42", null, "session:42", "researcher");
+    const task_id = try mgr.spawnWithAgent("quick task", "workspace-check", "agent", "session:42", null, "session:42", "researcher", null, 0);
     const status = try waitTaskTerminalStatus(&mgr, task_id);
     try std.testing.expectEqual(TaskStatus.completed, status);
     try std.testing.expectEqualStrings(expected_workspace, mgr.getTaskResult(task_id).?);
@@ -1216,7 +1240,7 @@ test "SubagentManager preserves named agent system_prompt when workspace_path is
     mgr.task_runner = testTaskRunnerWorkspaceAndPrompt;
     defer mgr.deinit();
 
-    const task_id = try mgr.spawnWithAgent("quick task", "workspace-prompt-check", "agent", "session:42", null, "session:42", "researcher");
+    const task_id = try mgr.spawnWithAgent("quick task", "workspace-prompt-check", "agent", "session:42", null, "session:42", "researcher", null, 0);
     const status = try waitTaskTerminalStatus(&mgr, task_id);
     try std.testing.expectEqual(TaskStatus.completed, status);
 

@@ -162,6 +162,8 @@ pub fn runTaskWithTools(
             .timeout_secs = request.http_timeout_secs,
         },
         .tools = request.tools_config,
+        .reasoning_effort = request.reasoning_effort,
+        .diagnostics = request.diagnostics,
     };
 
     var noop_obs = observability.NoopObserver{};
@@ -176,6 +178,20 @@ pub fn runTaskWithTools(
     );
     defer agent.deinit();
     agent.policy = &policy;
+
+    // Subagent traceability: parent session hash + context label for log disambiguation
+    agent.parent_session_hash = request.parent_session_hash;
+    agent.context_label = request.context_label;
+    agent.parent_context_label = request.parent_context_label;
+    // Generate unique session ID so subagent gets its own session=0x hash in logs
+    // Uses address of request as entropy — guaranteed unique per spawn
+    const subagent_session = std.fmt.allocPrint(allocator, "subagent:{x}:{s}", .{
+        @intFromPtr(&request),
+        request.context_label orelse "unnamed",
+    }) catch null;
+    if (subagent_session) |ss| {
+        agent.memory_session_id = ss;
+    }
 
     const full_system = try buildSubagentSystemPrompt(
         allocator,

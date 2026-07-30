@@ -3298,6 +3298,7 @@ pub fn refreshSubagentToolContext(self: anytype) void {
     spawn_tool.default_account_id = route.account_id;
     spawn_tool.default_chat_id = route.chat_id;
     spawn_tool.default_session_key = route.session_key;
+    spawn_tool.default_context_label = self.context_label;
 }
 
 fn findShellTool(self: anytype) ?Tool {
@@ -4278,7 +4279,7 @@ fn spawnSubagentTask(self: anytype, task: []const u8, label: []const u8, agent_n
         return try self.allocator.dupe(u8, "Spawn tool is not enabled.");
 
     const route = resolveSubagentOriginRoute(self);
-    const task_id = manager.spawnWithAgent(trimmed_task, label, route.channel, route.chat_id, route.account_id, route.session_key, agent_name) catch |err| {
+    const task_id = manager.spawnWithAgent(trimmed_task, label, route.channel, route.chat_id, route.account_id, route.session_key, agent_name, null, 0, self.context_label) catch |err| {
         return switch (err) {
             error.TooManyConcurrentSubagents => try self.allocator.dupe(u8, "Too many concurrent subagents. Wait for a task to finish."),
             error.UnknownAgent => if (agent_name) |name|
