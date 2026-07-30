@@ -574,6 +574,15 @@ fn freeModelRouteConfig(allocator: std.mem.Allocator, route: types.ModelRouteCon
     if (route.api_key) |api_key| allocator.free(api_key);
 }
 
+fn freeModelOverride(allocator: std.mem.Allocator, override: types.ModelOverride) void {
+    allocator.free(override.model);
+    if (override.valid_reasoning_efforts) |efforts| {
+        for (efforts) |e| allocator.free(e);
+        allocator.free(efforts);
+    }
+    if (override.default_reasoning_effort) |default| allocator.free(default);
+}
+
 /// Normalize a peer ID from config: convert legacy `#topic:N` format to
 /// canonical `:thread:N` format used internally for route matching.
 /// Logs a deprecation warning when conversion occurs.
@@ -1202,6 +1211,57 @@ pub fn parseJson(self: *Config, content: []const u8) !void {
                 }
             }
             self.model_routes = try list.toOwnedSlice(self.allocator);
+        }
+    }
+
+    // Parse model_overrides section
+    if (root.get("model_overrides")) |v| {
+        if (v == .array) {
+            var list: std.ArrayListUnmanaged(types.ModelOverride) = .empty;
+            errdefer {
+                for (list.items) |override| freeModelOverride(self.allocator, override);
+                list.deinit(self.allocator);
+            }
+            try list.ensureTotalCapacity(self.allocator, @intCast(v.array.items.len));
+            for (v.array.items) |item| {
+                if (item == .object) {
+                    const model = item.object.get("model") orelse continue;
+                    if (model != .string) continue;
+                    const model_owned = try self.allocator.dupe(u8, model.string);
+                    errdefer self.allocator.free(model_owned);
+
+                    var override = types.ModelOverride{
+                        .model = model_owned,
+                    };
+                    errdefer freeModelOverride(self.allocator, override);
+
+                    if (item.object.get("valid_reasoning_efforts")) |efforts_val| {
+                        if (efforts_val == .array) {
+                            var efforts: std.ArrayListUnmanaged([]const u8) = .empty;
+                            errdefer {
+                                for (efforts.items) |e| self.allocator.free(e);
+                                efforts.deinit(self.allocator);
+                            }
+                            for (efforts_val.array.items) |effort_item| {
+                                if (effort_item == .string) {
+                                    const effort_owned = try self.allocator.dupe(u8, effort_item.string);
+                                    try efforts.append(self.allocator, effort_owned);
+                                }
+                            }
+                            override.valid_reasoning_efforts = try efforts.toOwnedSlice(self.allocator);
+                        }
+                    }
+
+                    if (item.object.get("default_reasoning_effort")) |default_val| {
+                        if (default_val == .string) {
+                            override.default_reasoning_effort = try self.allocator.dupe(u8, default_val.string);
+                        }
+                    }
+
+                    try list.append(self.allocator, override);
+                }
+            }
+            self.model_overrides = try list.toOwnedSlice(self.allocator);
         }
     }
 

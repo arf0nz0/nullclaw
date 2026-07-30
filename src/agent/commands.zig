@@ -3582,6 +3582,36 @@ fn handleThinkCommand(self: anytype, arg: []const u8) ![]const u8 {
         return try std.fmt.allocPrint(self.allocator, "Thinking: {s}", .{self.reasoning_effort orelse "off"});
     }
 
+    // Check for per-model override of valid reasoning efforts
+    if (@hasField(@TypeOf(self.*), "model_overrides")) {
+        for (self.model_overrides) |override| {
+            if (std.mem.eql(u8, override.model, self.model_name)) {
+                if (override.valid_reasoning_efforts) |efforts| {
+                    if (std.ascii.eqlIgnoreCase(level, "off")) {
+                        self.reasoning_effort = null;
+                        return try self.allocator.dupe(u8, "Thinking set to: off");
+                    }
+                    for (efforts) |valid| {
+                        if (std.ascii.eqlIgnoreCase(level, valid)) {
+                            self.reasoning_effort = valid;
+                            return try std.fmt.allocPrint(self.allocator, "Thinking set to: {s}", .{valid});
+                        }
+                    }
+                    var buf: std.ArrayListUnmanaged(u8) = .empty;
+                    defer buf.deinit(self.allocator);
+                    try buf.appendSlice(self.allocator, "Invalid /think value for model ");
+                    try buf.appendSlice(self.allocator, self.model_name);
+                    try buf.appendSlice(self.allocator, ". Use: off");
+                    for (efforts) |valid| {
+                        try buf.appendSlice(self.allocator, "|");
+                        try buf.appendSlice(self.allocator, valid);
+                    }
+                    return try buf.toOwnedSlice(self.allocator);
+                }
+            }
+        }
+    }
+
     const parsed = parseReasoningEffort(level) orelse
         return try self.allocator.dupe(u8, "Invalid /think value. Use: off|minimal|low|medium|high|xhigh");
 

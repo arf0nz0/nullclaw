@@ -536,6 +536,18 @@ pub const ModelRouteConfig = struct {
     quota_class: ModelRouteQuotaClass = .normal,
 };
 
+/// Per-model capability overrides.
+/// Allows declaring model-specific reasoning effort vocabularies
+/// that differ from the built-in default list.
+pub const ModelOverride = struct {
+    model: []const u8,
+    /// If set, these are the only valid reasoning_effort values for this model.
+    /// When null, the built-in default list applies.
+    valid_reasoning_efforts: ?[][]const u8 = null,
+    /// Default reasoning_effort to use when none is explicitly set.
+    default_reasoning_effort: ?[]const u8 = null,
+};
+
 pub const HeartbeatConfig = struct {
     enabled: bool = false,
     interval_minutes: u32 = 30,

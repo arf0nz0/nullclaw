@@ -87,6 +87,7 @@ pub const AgentConfig = config_types.AgentConfig;
 pub const ToolFilterGroup = config_types.ToolFilterGroup;
 pub const ToolFilterGroupMode = config_types.ToolFilterGroupMode;
 pub const ModelRouteConfig = config_types.ModelRouteConfig;
+pub const ModelOverride = config_types.ModelOverride;
 pub const HeartbeatConfig = config_types.HeartbeatConfig;
 pub const CronConfig = config_types.CronConfig;
 pub const TelegramConfig = config_types.TelegramConfig;
@@ -167,6 +168,12 @@ const SerializedModelRouteConfig = struct {
     quota_class: config_types.ModelRouteQuotaClass = .normal,
 };
 
+const SerializedModelOverride = struct {
+    model: []const u8,
+    valid_reasoning_efforts: ?[][]const u8 = null,
+    default_reasoning_effort: ?[]const u8 = null,
+};
+
 fn freeNamedAgentSlice(allocator: std.mem.Allocator, agents: []const NamedAgentConfig) void {
     for (agents) |agent_cfg| {
         allocator.free(agent_cfg.name);
@@ -212,6 +219,7 @@ pub const Config = struct {
 
     // Model routing and delegate agents
     model_routes: []const ModelRouteConfig = &.{},
+    model_overrides: []const ModelOverride = &.{},
     agents: []const NamedAgentConfig = &.{},
     agent_bindings: []const @import("agent_routing.zig").AgentBinding = &.{},
     /// Runtime-only flag used by live `/bind` updates.
@@ -1120,6 +1128,19 @@ pub const Config = struct {
                 }
             }
             try writePrettyField(self.allocator, w, "  ", "model_routes", serialized_routes, ",\n");
+        }
+
+        if (self.model_overrides.len > 0) {
+            const serialized_overrides = try self.allocator.alloc(SerializedModelOverride, self.model_overrides.len);
+            defer self.allocator.free(serialized_overrides);
+            for (self.model_overrides, 0..) |override, i| {
+                serialized_overrides[i] = .{
+                    .model = override.model,
+                    .valid_reasoning_efforts = override.valid_reasoning_efforts,
+                    .default_reasoning_effort = override.default_reasoning_effort,
+                };
+            }
+            try writePrettyField(self.allocator, w, "  ", "model_overrides", serialized_overrides, ",\n");
         }
 
         // agents.defaults (model + heartbeat) + agents.list

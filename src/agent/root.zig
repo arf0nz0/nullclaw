@@ -304,6 +304,7 @@ pub const Agent = struct {
     max_tokens: u32 = max_tokens_resolver.DEFAULT_MODEL_MAX_TOKENS,
     max_tokens_override: ?u32 = null,
     reasoning_effort: ?[]const u8 = null,
+    model_overrides: []const config_types.ModelOverride = &.{},
     verbose_level: VerboseLevel = .off,
     reasoning_mode: ReasoningMode = .off,
     usage_mode: UsageMode = .off,
@@ -619,6 +620,7 @@ pub const Agent = struct {
             .max_tokens = resolved_max_tokens,
             .max_tokens_override = cfg.max_tokens,
             .reasoning_effort = cfg.reasoning_effort,
+            .model_overrides = cfg.model_overrides,
             .status_show_emojis = cfg.agent.status_show_emojis,
             .message_timeout_secs = cfg.agent.message_timeout_secs,
             .log_tool_calls = cfg.diagnostics.log_tool_calls,
@@ -640,6 +642,22 @@ pub const Agent = struct {
             .has_system_prompt = false,
             .last_turn_compacted = false,
         };
+    }
+
+    /// Applies per-model default reasoning effort if no explicit effort is set.
+    /// Called after agent init and after model switches.
+    pub fn applyModelOverrides(self: *Agent) void {
+        if (self.reasoning_effort != null) return; // explicit effort wins
+        for (self.model_overrides) |override| {
+            if (std.mem.eql(u8, override.model, self.model_name)) {
+                if (override.default_reasoning_effort) |default_effort| {
+                    if (default_effort.len > 0) {
+                        self.reasoning_effort = default_effort;
+                    }
+                }
+                return;
+            }
+        }
     }
 
     pub fn deinit(self: *Agent) void {

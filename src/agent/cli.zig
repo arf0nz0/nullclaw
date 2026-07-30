@@ -632,6 +632,7 @@ pub fn run(allocator: std.mem.Allocator, args: []const [:0]const u8) !void {
         if (parsed_args.provider_override != null or parsed_args.model_override != null) {
             agent.model_pinned_by_user = true;
         }
+        agent.applyModelOverrides();
         if (session_id) |sid| {
             agent.memory_session_id = sid;
         } else if (agent_memory_session_id) |memory_session_id| {
@@ -766,6 +767,7 @@ pub fn run(allocator: std.mem.Allocator, args: []const [:0]const u8) !void {
     agent.session_store = if (mem_rt) |rt| rt.session_store else null;
     agent.response_cache = if (mem_rt) |*rt| rt.response_cache else null;
     agent.mem_rt = if (mem_rt) |*rt| rt else null;
+    agent.applyModelOverrides();
 
     if (cost_tracker) |*c_tracker| {
         agent.usage_record_callback = cliUsageRecordCallback;
