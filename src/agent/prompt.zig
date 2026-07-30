@@ -790,13 +790,15 @@ fn appendChannelAttachmentsSection(w: anytype) !void {
 
 fn writeToolInstructionsSection(w: anytype, tools: anytype, ctx: PromptContext) !void {
     try w.writeAll("\n## Tool Use Protocol\n\n");
-    try w.writeAll("To use a tool, you MUST wrap a JSON object in <tool_call></tool_call> or [TOOL_CALL][/TOOL_CALL] tags.\n");
-    try w.writeAll("The JSON object MUST contain exactly two fields: \"name\" (string) and \"arguments\" (object).\n\n");
-    try w.writeAll("Example:\n```\n<tool_call>\n{\"name\": \"tool_name\", \"arguments\": {\"param\": \"value\"}}\n</tool_call>\n```\n\n");
-    try w.writeAll("CRITICAL RULES:\n");
-    try w.writeAll("1. ONLY use the format above. NEVER use <invoke>, <function>, or other XML-like formats.\n");
-    try w.writeAll("2. Output actual tags -- never describe steps or give examples.\n");
-    try w.writeAll("3. The internal content MUST be valid JSON. No trailing commas, no unquoted keys.\n\n");
+    if (!ctx.native_tools_enabled) {
+        try w.writeAll("To use a tool, you MUST wrap a JSON object in <tool_call></tool_call> or [TOOL_CALL][/TOOL_CALL] tags.\n");
+        try w.writeAll("The JSON object MUST contain exactly two fields: \"name\" (string) and \"arguments\" (object).\n\n");
+        try w.writeAll("Example:\n```\n<tool_call>\n{\"name\": \"tool_name\", \"arguments\": {\"param\": \"value\"}}\n</tool_call>\n```\n\n");
+        try w.writeAll("CRITICAL RULES:\n");
+        try w.writeAll("1. ONLY use the format above. NEVER use <invoke>, <function>, or other XML-like formats.\n");
+        try w.writeAll("2. Output actual tags -- never describe steps or give examples.\n");
+        try w.writeAll("3. The internal content MUST be valid JSON. No trailing commas, no unquoted keys.\n\n");
+    }
     try w.writeAll("CODING GUIDANCE:\n");
     try w.writeAll("- When reading or editing source code, PREFER the Hashline tool suite (`file_read_hashed` and `file_edit_hashed`).\n");
     try w.writeAll("- Use `file_read_hashed` to obtain stable line tags (L<num>:<hash>) and `file_edit_hashed` to apply changes using those tags.\n");

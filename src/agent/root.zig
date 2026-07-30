@@ -953,14 +953,16 @@ pub const Agent = struct {
     fn selectDisplayText(response_text: []const u8, parsed_text: []const u8, parsed_calls_len: usize) []const u8 {
         if (parsed_calls_len > 0) return parsed_text;
         if (parsed_text.len > 0) {
-            // Some malformed/unclosed tool-call payloads can survive into parsed_text
-            // via parser recovery fallbacks. Suppress them from user-visible output.
-            if (dispatcher.containsToolCallMarkup(parsed_text)) return "";
+            // When no valid tool calls were parsed, any tool-call markup in
+            // parsed_text is literal prose references or malformed attempts.
+            // Show the full response rather than silently truncating content.
+            // (Previous behaviour returned "" here, causing 1400+ byte truncation
+            // when the model mentioned tool-call tags in explanatory prose.)
+            if (dispatcher.containsToolCallMarkup(parsed_text)) return response_text;
             return parsed_text;
         }
-        // If tool-call markup exists but parsing produced no valid calls/text,
-        // never show the raw payload to the user.
-        if (dispatcher.containsToolCallMarkup(response_text)) return "";
+        // parsed_text empty: if markup exists but no calls extracted, it's
+        // literal references in prose — show full response, don't blank it.
         return response_text;
     }
 

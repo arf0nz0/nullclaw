@@ -261,6 +261,14 @@ pub fn parseXmlToolCalls(
 
             if (parsed_call) |call| {
                 try calls.append(allocator, call);
+            } else {
+                // Inner content failed to parse as a tool call.
+                // This happens when the model writes tag names as literal text
+                // (e.g. explaining the format in prose). Preserve the FULL block
+                // including the tag markers themselves so no content is lost.
+                // (before-text was already appended above, so no duplicate here.)
+                const full_block_len = selected_end + end_tag_len;
+                try text_parts.append(allocator, remaining[start..start + full_block_len]);
             }
 
             remaining = after_open[selected_end + end_tag_len ..];
