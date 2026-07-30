@@ -1,61 +1,242 @@
 # README-ARFONZO.md
 
-Customisations in arfonzo's nullclaw branch (`arfonzo`), documented for reference.
-This branch tracks upstream `main` and merges cleanly. All customisations below
-are the diff between `main` and `arfonzo`.
+Customisations in arfonzo's nullclaw branch (arfonzo), documented for reference.
+This branch tracks upstream main and merges cleanly. All customisations below
+are the diff between main and arfonzo.
 
 ## Branch Info
 
 - **Fork:** https://github.com/arf0nz0/nullclaw
-- **Branch:** `arfonzo`
-- **Base:** `main` (clean mirror of upstream)
+- **Branch:** arfonzo
+- **Base:** main (clean mirror of upstream)
 - **Platform:** aarch64 (Raspberry Pi 5), Debian 12 (bookworm)
-\n---\n\n## 1. Configurable Subagent Settings\n\n**Commit:** `5fbd5a96` -- feat: configurable subagent iteration limit\n\nMoves `SubagentConfig` from `subagent.zig` to `config_types.zig` and makes it\nconfigurable via `config.json`.\n\n### Config: `subagent`\n\n```json\n\\n---\n\n## 2. Build Script\n\n**Commit:** `debcf71b` -- feat: add build-arfonzo.sh helper script\n\nCustom build script with git-based version string (`arfonzo-<commit>`).\n\n### Usage\n\n```bash\ncd ~/src/nullclaw && ./scripts/build-arfonzo.sh\n```\n\n### Build Flags\n\n- `-Dchannels=all`\n- `-Dengines=base,sqlite`\n- `-Doptimize=ReleaseFast`\n- `-Dversion=\\n---\n\n## 3. Subagent Extra Tools & MCP Support\n\n**Commit:** `010789b2` -- feat(subagent): add extra_tools_enabled, extra_native_tools, and mcp_servers config\n\nAllows subagents to access additional native tools and MCP servers beyond the\nrestricted default set (shell, file I/O, git, http).\n\n### Config: `subagent`\n\n```json\n\
+
+---
+
+## 1. Configurable Subagent Settings
+
+**Commit:** 5fbd5a96 -- feat: configurable subagent iteration limit
+
+Moves SubagentConfig from subagent.zig to config_types.zig and makes it
+configurable via config.json.
+
+### Config: subagent
+
+  "subagent": {
+    "max_iterations": 100,
+    "max_concurrent": 4
+  }
+
+### Files Changed
+
+- src/config_types.zig -- SubagentConfig struct with configurable fields
+- src/config_parse.zig -- parsing for subagent config section
+- src/subagent.zig -- reads config instead of hardcoded defaults
+
+---
+
+## 2. Build Script
+
+**Commit:** debcf71b -- feat: add build-arfonzo.sh helper script
+
+Custom build script with git-based version string (arfonzo-commit).
+
+### Usage
+
+  cd ~/src/nullclaw && ./scripts/build-arfonzo.sh
+
+### Build Flags
+
+- -Dchannels=all
+- -Dengines=base,sqlite
+- -Doptimize=ReleaseFast
+- -Dversion=arfonzo-git-commit-short
+
+---
+
+## 3. Subagent Extra Tools and MCP Support
+
+**Commit:** 010789b2 -- feat(subagent): add extra_tools_enabled, extra_native_tools, and mcp_servers config
+
+Allows subagents to access additional native tools and MCP servers beyond the
+restricted default set (shell, file I/O, git, http).
+
+### Config: subagent
+
+  "subagent": {
+    "max_iterations": 1000,
+    "max_concurrent": 4,
+    "extra_tools_enabled": true,
+    "extra_native_tools": ["*"],
+    "mcp_servers": ["lean-ctx"]
+  }
+
 ### Available Extra Native Tools
 
-When `extra_tools_enabled` is true, subagents can use:
+When extra_tools_enabled is true, subagents can use:
 
-- `image_info`, `calculator`, `sqlite_query`, `anonymize_text`
-- `memory_store`, `memory_recall`, `memory_list`, `memory_forget`
-- `delegate`, `schedule`, `spawn`
-- `pushover` (HTTP-gated)
-- `web_search`, `web_fetch` (HTTP-gated)
-- `browser` (if `browser_enabled`)
-- `screenshot` (if `screenshot_enabled`)
+- image_info, calculator, sqlite_query, anonymize_text
+- memory_store, memory_recall, memory_list, memory_forget
+- delegate, schedule, spawn
+- pushover (HTTP-gated)
+- web_search, web_fetch (HTTP-gated)
+- browser (if browser_enabled)
+- screenshot (if screenshot_enabled)
 - MCP tools from allowlisted servers
 
 ### Files Changed
 
-- `src/config_types.zig` -- added extra fields to `SubagentConfig`
-- `src/config_parse.zig` -- parsing for new fields
-- `src/subagent.zig` -- `TaskRunRequest` and `SubagentManager` gain extra tool fields
-- `src/subagent_runner.zig` -- threads to `subagentTools()`, MCP allowlist filtering
-- `src/tools/root.zig` -- `subagentTools()` opts struct gains all extra tool fields + registrations
-- `config.example.json` -- updated example with new fields
+- src/config_types.zig -- added extra fields to SubagentConfig
+- src/config_parse.zig -- parsing for new fields
+- src/subagent.zig -- TaskRunRequest and SubagentManager gain extra tool fields
+- src/subagent_runner.zig -- threads to subagentTools(), MCP allowlist filtering
+- src/tools/root.zig -- subagentTools() opts struct gains all extra tool fields + registrations
+- config.example.json -- updated example with new fields
 
 ---
 
 ## 4. Migration Renamed Conflicts Tracking
 
-**Commit:** `ec2edda6` -- Add renamed_conflicts tracking to migration stats
+**Commit:** ec2edda6 -- Add renamed_conflicts tracking to migration stats
 
-Adds `renamed_conflicts` counter to openclaw migration stats.
+Adds renamed_conflicts counter to openclaw migration stats.
 
 ### Files Changed
 
-- `src/migration.zig` -- added `renamed_conflicts` count, dry-run simulation
-- `src/main.zig` -- updated migration output to show renamed count
+- src/migration.zig -- added renamed_conflicts count, dry-run simulation
+- src/main.zig -- updated migration output to show renamed count
 
 ---
 
-## 5. GLM Model Family Context Window
+## 5. GLM Model Family Context Windows
 
-**Commit:** `b306af30` -- feat: add GLM model family to MODEL_WINDOWS
+**Commit:** b306af30 -- feat: add GLM model family to MODEL_WINDOWS
 
-Adds GLM model entries to context window table. All `glm-*` models report
-200k token context window.
+Adds GLM model entries to context window table with correct per-model values.
+
+### Context Windows
+
+- glm-5.2: 1,048,576 (1M)
+- glm-5.1: 200,000
+- glm-5: 200,000
+- glm-5-turbo: 200,000
+- glm-4.7: 200,000
+- glm-4.6: 200,000
+- glm-4.5: 128,000
+- glm-4-32b-0414-128k: 128,000
+- glm-* (fallback prefix match): 200,000
 
 ### Files Changed
 
-- `src/agent/context_tokens.zig` -- GLM entries in `MODEL_WINDOWS` + prefix matcher
-\n---\n\n## Upstream Sync Workflow\n\nKeep `main` as a clean mirror of upstream. Never merge upstream directly into\n`arfonzo`.\n\n```\nupstream/main -> origin/main -> arfonzo\n```\n\n1. `git checkout main`\n2. `git fetch upstream`\n3. `git merge upstream/main`\n4. `git push origin main`\n5. `git checkout arfonzo`\n6. `git merge main`\n7. Resolve conflicts (likely in `config_types.zig`)\n8. `git push origin arfonzo`\n9. Rebuild: `./scripts/build-arfonzo.sh`\n10. Deploy: `cp zig-out/bin/nullclaw ~/.local/bin/nullclaw-linux-aarch64-arfonzo.bin`\n\n---\n\n## Deploy\n\nBinary built to `zig-out/bin/nullclaw`. Deploy is manual:\n\n```bash\ncp ~/src/nullclaw/zig-out/bin/nullclaw ~/.local/bin/nullclaw-linux-aarch64-arfonzo.bin\n```\n\nTakes effect on next gateway restart (manual).\n\n### Binary Layout (`~/.local/bin/`)\n\n- `nullclaw` -> symlink -> `nullclaw-linux-aarch64-arfonzo.bin` (custom build)\n- `nullclaw-linux-aarch64-arfonzo.bin` -- arfonzo build, reports `nullclaw arfonzo-<commit>`\n- `nullclaw-linux-aarch64.bin` -- original release, preserved as fallback\n- Revert: `ln -sf nullclaw-linux-aarch64.bin nullclaw`\n- Restore: `ln -sf nullclaw-linux-aarch64-arfonzo.bin nullclaw`\n
+- src/agent/context_tokens.zig -- GLM entries in MODEL_WINDOWS + prefix matcher
+
+---
+
+## 6. Per-Model Overrides for Reasoning Effort
+
+**Commit:** 3919ef5e -- feat: add per-model overrides for reasoning effort config
+
+Allows defining model-specific reasoning effort vocabularies and defaults in
+config.json, instead of relying on hardcoded global defaults.
+
+### Config: model_overrides
+
+  "model_overrides": [
+    {
+      "model": "glm-5.2",
+      "valid_reasoning_efforts": ["low", "medium", "high", "max"],
+      "default_reasoning_effort": "high"
+    }
+  ]
+
+### Fields
+
+- model (string, required) -- model name to match (e.g. glm-5.2)
+- valid_reasoning_efforts (array of strings, optional) -- restricts valid effort values for this model. When null, built-in defaults apply.
+- default_reasoning_effort (string, optional) -- default effort applied when none is explicitly set.
+
+### Files Changed
+
+- src/config_types.zig -- new ModelOverride struct
+- src/config.zig -- model_overrides config field
+- src/config_parse.zig -- JSON parsing for model_overrides section
+- src/agent/cli.zig -- CLI wiring
+- src/agent/commands.zig -- command plumbing
+- src/agent/root.zig -- applyModelOverrides() function + Agent field
+
+---
+
+## 7. Tool Call Format and Truncation Bug Fixes
+
+**Commit:** 3e6c17bf -- fix(agent): prevent truncation and tag-eating in prose
+
+Three confirmed bugs fixed:
+
+### Bug 1: Message Truncation
+
+**Root cause:** selectDisplayText() returned empty string when tool-call markup
+was detected in parsed_text but no valid calls were parsed. This ate 1400+ bytes
+when the model mentioned tool-call tags in explanatory prose.
+
+**Fix:** Return response_text (full response) instead of empty string.
+
+**File:** src/agent/root.zig -- selectDisplayText()
+
+### Bug 2: Tag-Eating in Prose
+
+**Root cause:** parseXmlToolCalls() discarded the full block when inner content
+failed JSON parse. Tag markers and inner text were lost.
+
+**Fix:** Preserve the full block including tag markers when inner content fails to
+parse as a valid tool call.
+
+**File:** src/agent/dispatcher.zig -- parseXmlToolCalls()
+
+### Bug 3: Contradictory Tool Format Instructions
+
+**Root cause:** Tool format instructions (XML tool_call format) were always
+emitted in the system prompt, even for models using native function calling.
+This created contradictory guidance.
+
+**Fix:** Wrap tool format instructions in a native_tools_enabled conditional so
+models using native function calling do not get XML format guidance.
+
+**File:** src/agent/prompt.zig -- writeToolInstructionsSection()
+
+---
+
+## Upstream Sync Workflow
+
+Keep main as a clean mirror of upstream. Never merge upstream directly into
+arfonzo.
+
+  upstream/main -> origin/main -> arfonzo
+
+1. git checkout main
+2. git fetch upstream
+3. git merge upstream/main
+4. git push origin main
+5. git checkout arfonzo
+6. git merge main
+7. Resolve conflicts (likely in config_types.zig)
+8. git push origin arfonzo
+9. Rebuild: ./scripts/build-arfonzo.sh
+10. Deploy: cp zig-out/bin/nullclaw ~/.local/bin/nullclaw-linux-aarch64-arfonzo.bin
+
+---
+
+## Deploy
+
+Binary built to zig-out/bin/nullclaw. Deploy is manual:
+
+  cp ~/src/nullclaw/zig-out/bin/nullclaw ~/.local/bin/nullclaw-linux-aarch64-arfonzo.bin
+
+Takes effect on next gateway restart (manual).
+
+### Binary Layout (~/.local/bin/)
+
+- nullclaw -> symlink -> nullclaw-linux-aarch64-arfonzo.bin (custom build)
+- nullclaw-linux-aarch64-arfonzo.bin -- arfonzo build, reports nullclaw arfonzo-commit
+- nullclaw-linux-aarch64.bin -- original release, preserved as fallback
+- Revert: ln -sf nullclaw-linux-aarch64.bin nullclaw
+- Restore: ln -sf nullclaw-linux-aarch64-arfonzo.bin nullclaw

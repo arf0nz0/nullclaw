@@ -232,6 +232,14 @@
     "require_approval_for_medium_risk": true
   },
 
+  "model_overrides": [
+    {
+      "model": "glm-5.2",
+      "valid_reasoning_efforts": ["low", "medium", "high", "max"],
+      "default_reasoning_effort": "high"
+    }
+  ],
+
   "subagent": {
     "max_iterations": 100,
     "max_concurrent": 4,
