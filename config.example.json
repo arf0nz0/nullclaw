@@ -235,7 +235,7 @@
   "model_overrides": [
     {
       "model": "glm-5.2",
-      "valid_reasoning_efforts": ["low", "medium", "high", "max"],
+      "valid_reasoning_efforts": ["none", "high", "max"],
       "default_reasoning_effort": "high"
     }
   ],

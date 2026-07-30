@@ -1646,6 +1646,15 @@ fn buildChatRequestBody(
             try buf.appendSlice(allocator, ",\"thinking\":{\"type\":\"disabled\"}");
         }
     }
+    if (thinking_param and reasoning_enabled) {
+        if (request.reasoning_effort) |effort| {
+            if (effort.len > 0) {
+                try buf.appendSlice(allocator, ",\"reasoning_effort\":\"");
+                try buf.appendSlice(allocator, effort);
+                try buf.appendSlice(allocator, "\"");
+            }
+        }
+    }
     if (enable_thinking_param and reasoning_enabled) {
         try buf.appendSlice(allocator, ",\"enable_thinking\":true");
     }
@@ -1704,6 +1713,15 @@ fn buildStreamingChatRequestBody(
             try buf.appendSlice(allocator, ",\"thinking\":{\"type\":\"enabled\"}");
         } else {
             try buf.appendSlice(allocator, ",\"thinking\":{\"type\":\"disabled\"}");
+        }
+    }
+    if (thinking_param and reasoning_enabled) {
+        if (request.reasoning_effort) |effort| {
+            if (effort.len > 0) {
+                try buf.appendSlice(allocator, ",\"reasoning_effort\":\"");
+                try buf.appendSlice(allocator, effort);
+                try buf.appendSlice(allocator, "\"");
+            }
         }
     }
     if (enable_thinking_param and reasoning_enabled) {
@@ -2041,6 +2059,49 @@ test "buildChatRequestBody emits thinking param for GLM when reasoning_effort se
     const body = try buildChatRequestBody(allocator, req, "glm-4.7-thinking", 0.7, false, true, false, false, false, null, null);
     defer allocator.free(body);
     try std.testing.expect(std.mem.indexOf(u8, body, "\"thinking\":{\"type\":\"enabled\"}") != null);
+}
+
+test "buildChatRequestBody emits reasoning_effort field for GLM when thinking_param and reasoning_effort set" {
+    const allocator = std.testing.allocator;
+    const msgs = [_]root.ChatMessage{root.ChatMessage.user("test")};
+    const req = root.ChatRequest{
+        .messages = &msgs,
+        .model = "glm-5.2",
+        .reasoning_effort = "max",
+    };
+    const body = try buildChatRequestBody(allocator, req, "glm-5.2", 0.7, false, true, false, false, false, null, null);
+    defer allocator.free(body);
+    try std.testing.expect(std.mem.indexOf(u8, body, "\"thinking\":{\"type\":\"enabled\"}") != null);
+    try std.testing.expect(std.mem.indexOf(u8, body, "\"reasoning_effort\":\"max\"") != null);
+}
+
+test "buildChatRequestBody omits reasoning_effort when reasoning_effort is none" {
+    const allocator = std.testing.allocator;
+    const msgs = [_]root.ChatMessage{root.ChatMessage.user("test")};
+    const req = root.ChatRequest{
+        .messages = &msgs,
+        .model = "glm-5.2",
+        .reasoning_effort = "none",
+    };
+    const body = try buildChatRequestBody(allocator, req, "glm-5.2", 0.7, false, true, false, false, false, null, null);
+    defer allocator.free(body);
+    // thinking should be disabled since reasoning is off
+    try std.testing.expect(std.mem.indexOf(u8, body, "\"thinking\":{\"type\":\"disabled\"}") != null);
+    try std.testing.expect(std.mem.indexOf(u8, body, "\"reasoning_effort\"") == null);
+}
+
+test "buildStreamingChatRequestBody emits reasoning_effort field for GLM when thinking_param and reasoning_effort set" {
+    const allocator = std.testing.allocator;
+    const msgs = [_]root.ChatMessage{root.ChatMessage.user("test")};
+    const req = root.ChatRequest{
+        .messages = &msgs,
+        .model = "glm-5.2",
+        .reasoning_effort = "max",
+    };
+    const body = try buildStreamingChatRequestBody(allocator, req, "glm-5.2", 0.7, false, true, false, false, false, null, null);
+    defer allocator.free(body);
+    try std.testing.expect(std.mem.indexOf(u8, body, "\"thinking\":{\"type\":\"enabled\"}") != null);
+    try std.testing.expect(std.mem.indexOf(u8, body, "\"reasoning_effort\":\"max\"") != null);
 }
 
 test "buildChatRequestBody omits thinking param when thinking_param false" {
