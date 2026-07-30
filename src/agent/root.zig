@@ -863,15 +863,15 @@ pub const Agent = struct {
             prompt_estimate +|= estimateToolSpecsTokens(tool_specs);
         }
 
-        if (prompt_estimate >= token_limit) return 1;
+        if (prompt_estimate >= token_limit) return 1024;
 
         const available = token_limit - prompt_estimate;
         const reserve = @min(@as(u64, 256), available / 4);
-        if (available <= reserve) return 1;
+        if (available <= reserve) return 1024;
 
         const completion_budget = available - reserve;
         const completion_budget_u32: u32 = @intCast(@min(completion_budget, @as(u64, std.math.maxInt(u32))));
-        if (completion_budget_u32 == 0) return 1;
+        if (completion_budget_u32 == 0) return 1024;
         return @max(@as(u32, 1), @min(max_tokens, completion_budget_u32));
     }
 
