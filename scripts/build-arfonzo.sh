@@ -4,7 +4,10 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 # Resolve zig binary: $ZIG env var → PATH → ~/.local/bin/zig
-ZIG="${ZIG:-$(command -v zig 2>/dev/null)}"
+ZIG="${ZIG:-}"
+if [ -z "$ZIG" ]; then
+    ZIG="$(command -v zig 2>/dev/null || true)"
+fi
 if [ -z "$ZIG" ]; then
     ZIG="$HOME/.local/bin/zig"
 fi
