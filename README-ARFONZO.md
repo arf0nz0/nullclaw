@@ -205,6 +205,51 @@ models using native function calling do not get XML format guidance.
 
 ---
 
+## 8. Inline Injected Strings Override
+
+**Commit:** (pending)
+
+Replaces the separate `injected_strings.json` file with an inline `injected_strings`
+section in `config.json`. Removes the need for a separate file and adds an `enabled`
+boolean kill switch.
+
+### Config: injected_strings
+
+  "injected_strings": {
+    "enabled": true,
+    "reflection_prompt": "...",
+    "empty_response_retry": "...",
+    "force_follow_through": "...",
+    "max_iterations": "...",
+    "skip_tool_descriptions_native": true,
+    "safety_section": "...",
+    "channel_choices": "...",
+    "scheduled_tasks_group": "..."
+  }
+
+### Fields
+
+- enabled (bool, required) — master toggle. false disables all overrides, falling back to hardcoded defaults.
+- reflection_prompt (string, optional) — injected after each tool batch to prompt analysis.
+- empty_response_retry (string, optional) — injected when the model returns an empty response.
+- force_follow_through (string, optional) — injected when the model promises action but doesn't call tools.
+- max_iterations (string, optional) — injected when max tool iterations is reached.
+- skip_tool_descriptions_native (bool, optional) — when true, skips tool name+description lines in the system prompt for providers using native function calling (saves ~1,376 tokens/session).
+- safety_section (string, optional) — overrides the hardcoded safety/security section of the system prompt.
+- channel_choices (string, optional) — overrides the channel choices formatting instructions.
+- scheduled_tasks_group (string, optional) — overrides the scheduled tasks group instructions. `{gid}` placeholder is substituted at runtime.
+
+### Files Changed
+
+- src/config_types.zig -- new InjectedStringsConfig struct
+- src/config.zig -- injected_strings field replaces injected_strings_override path
+- src/config_parse.zig -- parses inline JSON section instead of file path
+- src/agent/root.zig -- reads from config struct instead of loading file
+- src/agent/injected_strings.zig -- InjectedStrings struct kept, load() function now unused (can be removed in future cleanup)
+- config.example.json -- added example injected_strings section
+
+---
+
 ## Upstream Sync Workflow
 
 Keep main as a clean mirror of upstream. Never merge upstream directly into

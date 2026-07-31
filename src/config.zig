@@ -267,6 +267,7 @@ pub const Config = struct {
     gateway_port: u16 = 3000,
     workspace_only: bool = true,
     max_actions_per_hour: u32 = 20,
+    injected_strings: ?@import("config_types.zig").InjectedStringsConfig = null,
 
     allocator: std.mem.Allocator,
     arena: ?*std.heap.ArenaAllocator = null,

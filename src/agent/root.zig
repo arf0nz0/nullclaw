@@ -31,6 +31,7 @@ const ObserverEvent = observability.ObserverEvent;
 const SecurityPolicy = @import("../security/policy.zig").SecurityPolicy;
 const util = @import("../util.zig");
 const verbose_mod = @import("../verbose.zig");
+const injected_strings = @import("injected_strings.zig");
 const cost_mod = @import("../cost.zig");
 
 const cache = memory_mod.cache;
@@ -299,6 +300,7 @@ pub const Agent = struct {
     /// Models auto-detected as not supporting vision (built at runtime).
     detected_vision_disabled: std.ArrayListUnmanaged([]const u8) = .empty,
     max_tool_iterations: u32,
+    injected_strings_cfg: ?injected_strings.InjectedStrings = null,
     max_history_messages: u32,
     auto_save: bool,
     compact_context: bool = true,
@@ -615,6 +617,23 @@ pub const Agent = struct {
             .vision_disabled_models = cfg.agent.vision_disabled_models,
             .auto_disable_vision_on_error = cfg.agent.auto_disable_vision_on_error,
             .max_tool_iterations = cfg.agent.max_tool_iterations,
+            .injected_strings_cfg = blk: {
+                if (cfg.injected_strings) |isc| {
+                    if (isc.enabled) {
+                        break :blk injected_strings.InjectedStrings{
+                            .reflection_prompt = isc.reflection_prompt,
+                            .empty_response_retry = isc.empty_response_retry,
+                            .force_follow_through = isc.force_follow_through,
+                            .max_iterations = isc.max_iterations,
+                            .skip_tool_descriptions_native = isc.skip_tool_descriptions_native,
+                            .safety_section = isc.safety_section,
+                            .channel_choices = isc.channel_choices,
+                            .scheduled_tasks_group = isc.scheduled_tasks_group,
+                        };
+                    }
+                }
+                break :blk null;
+            },
             .max_history_messages = cfg.agent.max_history_messages,
             .auto_save = cfg.memory.auto_save,
             .compact_context = cfg.agent.compact_context,
@@ -2054,6 +2073,7 @@ pub const Agent = struct {
                 .identity_config = if (cfg_for_prompt_ptr) |cfg| cfg.identity else null,
                 .observer = self.observer,
                 .native_tools_enabled = prompt_native_tools_enabled,
+                .injected_strings = self.injected_strings_cfg,
             });
             const active_skill_section = try commands.buildActiveSkillPromptSection(self);
             defer if (active_skill_section) |section| self.allocator.free(section);
@@ -2580,7 +2600,8 @@ pub const Agent = struct {
                     if (empty_response_retry_count < 1 and
                         iteration + 1 < self.max_tool_iterations)
                     {
-                        try self.appendOwnedHistoryMessage(.{ .role = .user, .content = try self.allocator.dupe(u8, "SYSTEM: Your previous reply was empty. Respond with a direct user-visible answer or emit the necessary tool call(s). Do not return an empty response. - If the user asks for information from the internet, web, or external sources (for example: recipes, news, latest documentation), you SHOULD use the `web_search` tool immediately.\n- Do not merely state that you can find the information; execute the tool call in the same turn.\n- NEVER respond with just 'I will search' or 'Let me check' without actually calling the tool in the same response.\n- If the user's intent implies a need for fresh data or external verification, default to using `web_search`.\n\n") });
+                                                const empty_retry_text = (if (self.injected_strings_cfg) |is| is.empty_response_retry else null) orelse "SYSTEM: Your previous reply was empty. Respond with a direct user-visible answer or emit the necessary tool call(s). Do not return an empty response. - If the user asks for information from the internet, web, or external sources (for example: recipes, news, latest documentation), you SHOULD use the `web_search` tool immediately.\n- Do not merely state that you can find the information; execute the tool call in the same turn.\n- NEVER respond with just 'I will search' or 'Let me check' without actually calling the tool in the same response.\n- If the user's intent implies a need for fresh data or external verification, default to using `web_search`.\n\n";
+                                                try self.appendOwnedHistoryMessage(.{ .role = .user, .content = try self.allocator.dupe(u8, empty_retry_text) });
                         self.trimHistory();
                         empty_response_retry_count += 1;
                         continue;
@@ -2598,9 +2619,14 @@ pub const Agent = struct {
                     shouldForceActionFollowThrough(display_text))
                 {
                     try self.appendOwnedHistoryMessage(.{ .role = .assistant, .content = try self.dupeForHistory(display_text) });
-                    try self.appendOwnedHistoryMessage(.{ .role = .user, .content = try self.allocator.dupe(u8, "SYSTEM: You just promised to take action now (for example: \"I'll try/check now\"). " ++
+                    try self.appendOwnedHistoryMessage(.{ .role = .user, .content = try self.allocator.dupe(u8, (if (self.injected_strings_cfg) |is|
+                                            (if (is.force_follow_through) |ff| ff else "SYSTEM: You just promised to take action now (for example: \"I'll try/check now\"). " ++
                         "Do it in this turn by issuing the appropriate tool call(s). " ++
-                        "If no tool can perform it, respond with a clear limitation now and do not promise another future attempt.") });
+                        "If no tool can perform it, respond with a clear limitation now and do not promise another future attempt.")
+                                        else
+                                            "SYSTEM: You just promised to take action now (for example: \"I'll try/check now\"). " ++
+                        "Do it in this turn by issuing the appropriate tool call(s). " ++
+                        "If no tool can perform it, respond with a clear limitation now and do not promise another future attempt.")) });
                     self.trimHistory();
                     self.freeResponseFields(&response);
                     forced_follow_through_count += 1;
@@ -2820,12 +2846,11 @@ pub const Agent = struct {
             const formatted_results = try dispatcher.formatToolResults(arena, results_buf.items);
             const scrubbed_results = try providers.scrubToolOutput(arena, formatted_results);
             const redacted_results = if (self.redactor) |r| try r.redact(arena, scrubbed_results) else scrubbed_results;
+            const reflection_fmt = (if (self.injected_strings_cfg) |is| is.reflection_prompt else null) orelse "Reflect on the tool results above and decide your next steps. If a tool failed due to policy/permissions, do not repeat the same blocked call; explain the limitation and choose a different available tool or ask the user for permission/config change. If a tool failed due to a transient issue (timeout/network/rate-limit), proactively retry up to 2 times with adjusted parameters before giving up.";
             const with_reflection = try std.fmt.allocPrint(
                 arena,
-                "{s}\n\nReflect on the tool results above and decide your next steps. " ++
-                    "If a tool failed due to policy/permissions, do not repeat the same blocked call; explain the limitation and choose a different available tool or ask the user for permission/config change. " ++
-                    "If a tool failed due to a transient issue (timeout/network/rate-limit), proactively retry up to 2 times with adjusted parameters before giving up.",
-                .{redacted_results},
+                "{s}\n\n{s}",
+                .{ redacted_results, reflection_fmt },
             );
             try self.history.append(self.allocator, .{
                 .role = .user,
@@ -2848,9 +2873,7 @@ pub const Agent = struct {
         // Append a pseudo-user message forcing a text-only summary
         try self.history.append(self.allocator, .{
             .role = .user,
-            .content = try self.allocator.dupe(u8, "SYSTEM: You have reached the maximum number of tool iterations. " ++
-                "You MUST NOT call any more tools. Summarize what you have accomplished " ++
-                "so far and what remains to be done. Respond in the same language the user used."),
+            .content = try self.allocator.dupe(u8, (if (self.injected_strings_cfg) |is| is.max_iterations else null) orelse "SYSTEM: You have reached the maximum number of tool iterations. You MUST NOT call any more tools. Summarize what you have accomplished so far and what remains to be done. Respond in the same language the user used.")
         });
 
         // Build messages for the summary call

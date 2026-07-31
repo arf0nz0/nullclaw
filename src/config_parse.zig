@@ -1934,6 +1934,41 @@ pub fn parseJson(self: *Config, content: []const u8) !void {
             if (tl.object.get("tool_customizations_file")) |v| {
                 if (v == .string) self.tools.tool_customizations_file = try self.allocator.dupe(u8, v.string);
             }
+            // injected_strings (top-level section, NOT inside tools)
+            if (root.get("injected_strings")) |v| {
+                if (v == .object) {
+                    const obj = v.object;
+                    var isc = types.InjectedStringsConfig{};
+                    if (obj.get("enabled")) |e| {
+                        if (e == .bool) isc.enabled = e.bool;
+                    }
+                    if (obj.get("reflection_prompt")) |s| {
+                        if (s == .string) isc.reflection_prompt = try self.allocator.dupe(u8, s.string);
+                    }
+                    if (obj.get("empty_response_retry")) |s| {
+                        if (s == .string) isc.empty_response_retry = try self.allocator.dupe(u8, s.string);
+                    }
+                    if (obj.get("force_follow_through")) |s| {
+                        if (s == .string) isc.force_follow_through = try self.allocator.dupe(u8, s.string);
+                    }
+                    if (obj.get("max_iterations")) |s| {
+                        if (s == .string) isc.max_iterations = try self.allocator.dupe(u8, s.string);
+                    }
+                    if (obj.get("skip_tool_descriptions_native")) |s| {
+                        if (s == .bool) isc.skip_tool_descriptions_native = s.bool;
+                    }
+                    if (obj.get("safety_section")) |s| {
+                        if (s == .string) isc.safety_section = try self.allocator.dupe(u8, s.string);
+                    }
+                    if (obj.get("channel_choices")) |s| {
+                        if (s == .string) isc.channel_choices = try self.allocator.dupe(u8, s.string);
+                    }
+                    if (obj.get("scheduled_tasks_group")) |s| {
+                        if (s == .string) isc.scheduled_tasks_group = try self.allocator.dupe(u8, s.string);
+                    }
+                    self.injected_strings = isc;
+                }
+            }
             if (tl.object.get("trigger_modifiers")) |v| {
                 if (v == .array) self.tools.trigger_modifiers = try parseStringArray(self.allocator, v.array);
             }

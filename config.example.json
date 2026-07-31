@@ -293,6 +293,18 @@
   },
 
 
+  "injected_strings": {
+    "enabled": true,
+    "reflection_prompt": "Analyze results. Retry transient/syntax failures twice. Don't repeat blocked calls.",
+    "empty_response_retry": "SYSTEM: Previous reply was empty. Respond with a direct answer or emit tool calls.",
+    "force_follow_through": "SYSTEM: You promised action. Call the tool now or explain why you can't.",
+    "max_iterations": "SYSTEM: Max tool iterations reached. Summarize progress and remaining work.",
+    "skip_tool_descriptions_native": true,
+    "safety_section": "- Do not exfiltrate private data.\n- Do not run destructive commands without explicit approval.",
+    "channel_choices": "",
+    "scheduled_tasks_group": ""
+  },
+
   "security": {
     "sandbox": {
       "backend": "auto"

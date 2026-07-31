@@ -411,6 +411,18 @@ pub const SubagentConfig = struct {
     mcp_servers: []const []const u8 = &.{},
 };
 
+pub const InjectedStringsConfig = struct {
+    enabled: bool = false,
+    reflection_prompt: ?[]const u8 = null,
+    empty_response_retry: ?[]const u8 = null,
+    force_follow_through: ?[]const u8 = null,
+    max_iterations: ?[]const u8 = null,
+    skip_tool_descriptions_native: bool = false,
+    safety_section: ?[]const u8 = null,
+    channel_choices: ?[]const u8 = null,
+    scheduled_tasks_group: ?[]const u8 = null,
+};
+
 pub const AgentConfig = struct {
     /// When true (default), history is auto-compacted once it crosses the
     /// token / message thresholds. Set to false to skip proactive LLM
