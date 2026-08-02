@@ -24,6 +24,7 @@ const security = @import("security/policy.zig");
 const subagent_mod = @import("subagent.zig");
 const subagent_runner = @import("subagent_runner.zig");
 const agent_routing = @import("agent_routing.zig");
+const agent_mod = @import("agent/root.zig");
 const provider_runtime = @import("providers/runtime_bundle.zig");
 const thread_stacks = @import("thread_stacks.zig");
 const control_plane = @import("control_plane.zig");
@@ -933,6 +934,32 @@ fn handleTelegramBuiltinCommand(
     return true;
 }
 
+/// Context for forwarding agent progress hints (interim text + tool names) to Telegram.
+const TelegramProgressCtx = struct {
+    tg_ptr: *telegram.TelegramChannel,
+    chat_id: []const u8,
+
+    fn callback(ctx: *anyopaque, hint: agent_mod.ProgressHint) void {
+        const self: *TelegramProgressCtx = @ptrCast(@alignCast(ctx));
+        switch (hint.kind) {
+            .interim_text => {
+                // Always deliver — this is content the user needs.
+                self.tg_ptr.sendMessage(self.chat_id, hint.text) catch {};
+            },
+            .tool_start => {
+                // Only fires when verbose_level >= on (gated in root.zig).
+                const msg = std.fmt.allocPrint(std.heap.page_allocator, "🔧 {s}", .{hint.text}) catch return;
+                defer std.heap.page_allocator.free(msg);
+                self.tg_ptr.sendMessage(self.chat_id, msg) catch {};
+            },
+        }
+    }
+
+    pub fn makeSink(self: *TelegramProgressCtx) agent_mod.ProgressSink {
+        return .{ .callback = callback, .ctx = @ptrCast(self) };
+    }
+};
+
 fn processTelegramMessage(
     allocator: std.mem.Allocator,
     runtime: *ChannelRuntime,
@@ -983,10 +1010,17 @@ fn processTelegramMessage(
     };
     const sink = tg_ptr.makeSink(&stream_ctx);
 
+    // Build progress sink for interim text + verbose tool names.
+    var progress_ctx = TelegramProgressCtx{
+        .tg_ptr = tg_ptr,
+        .chat_id = sender,
+    };
+    const progress_sink = progress_ctx.makeSink();
+
     if (runtime.session_mgr.routeInbound(session_key, content) == .skip) return;
 
     tg_ptr.setTaskReaction(sender, message_id, .running);
-    const reply = runtime.session_mgr.processMessageStreaming(session_key, content, conversation_context, sink, null) catch |err| {
+    const reply = runtime.session_mgr.processMessageStreaming(session_key, content, conversation_context, sink, progress_sink) catch |err| {
         logAgentProcessingError(allocator, "Agent error", err);
         tg_ptr.setTaskReaction(sender, message_id, .failed);
         const owned_err_msg = detailedProviderErrorForDisplay(allocator, err) catch null;

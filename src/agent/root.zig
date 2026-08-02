@@ -63,8 +63,15 @@ pub fn estimate_text_tokens(text: []const u8) u32 {
 // ─── Progress hints ──────────────────────────────────────────────────────────
 
 /// Progress hint emitted during a turn. For tool-call starts, text is the tool name.
+/// For interim_text, text is the display text generated alongside tool calls.
+pub const ProgressKind = enum {
+    interim_text,
+    tool_start,
+};
+
 pub const ProgressHint = struct {
     text: []const u8,
+    kind: ProgressKind = .tool_start,
 };
 
 /// Callback invoked for each progress hint. Same lifetime rules as StreamCallback.
@@ -2567,6 +2574,13 @@ pub const Agent = struct {
                     free_parsed_text = true;
                 }
 
+                // Native path: response_text is clean preamble (no tool-call markup).
+                // Populate parsed_text so selectDisplayText + interim callback can use it.
+                if (parsed_text.len == 0 and response_text.len > 0) {
+                    parsed_text = response_text;
+                    // Borrowed slice — don't set free_parsed_text, defer won't free it.
+                }
+
                 // Build history content with serialized tool calls
                 assistant_history_content = try dispatcher.buildAssistantHistoryWithToolCalls(
                     self.allocator,
@@ -2600,8 +2614,8 @@ pub const Agent = struct {
                     if (empty_response_retry_count < 1 and
                         iteration + 1 < self.max_tool_iterations)
                     {
-                                                const empty_retry_text = (if (self.injected_strings_cfg) |is| is.empty_response_retry else null) orelse "SYSTEM: Your previous reply was empty. Respond with a direct user-visible answer or emit the necessary tool call(s). Do not return an empty response. - If the user asks for information from the internet, web, or external sources (for example: recipes, news, latest documentation), you SHOULD use the `web_search` tool immediately.\n- Do not merely state that you can find the information; execute the tool call in the same turn.\n- NEVER respond with just 'I will search' or 'Let me check' without actually calling the tool in the same response.\n- If the user's intent implies a need for fresh data or external verification, default to using `web_search`.\n\n";
-                                                try self.appendOwnedHistoryMessage(.{ .role = .user, .content = try self.allocator.dupe(u8, empty_retry_text) });
+                        const empty_retry_text = (if (self.injected_strings_cfg) |is| is.empty_response_retry else null) orelse "SYSTEM: Your previous reply was empty. Respond with a direct user-visible answer or emit the necessary tool call(s). Do not return an empty response. - If the user asks for information from the internet, web, or external sources (for example: recipes, news, latest documentation), you SHOULD use the `web_search` tool immediately.\n- Do not merely state that you can find the information; execute the tool call in the same turn.\n- NEVER respond with just 'I will search' or 'Let me check' without actually calling the tool in the same response.\n- If the user's intent implies a need for fresh data or external verification, default to using `web_search`.\n\n";
+                        try self.appendOwnedHistoryMessage(.{ .role = .user, .content = try self.allocator.dupe(u8, empty_retry_text) });
                         self.trimHistory();
                         empty_response_retry_count += 1;
                         continue;
@@ -2620,13 +2634,13 @@ pub const Agent = struct {
                 {
                     try self.appendOwnedHistoryMessage(.{ .role = .assistant, .content = try self.dupeForHistory(display_text) });
                     try self.appendOwnedHistoryMessage(.{ .role = .user, .content = try self.allocator.dupe(u8, (if (self.injected_strings_cfg) |is|
-                                            (if (is.force_follow_through) |ff| ff else "SYSTEM: You just promised to take action now (for example: \"I'll try/check now\"). " ++
-                        "Do it in this turn by issuing the appropriate tool call(s). " ++
-                        "If no tool can perform it, respond with a clear limitation now and do not promise another future attempt.")
-                                        else
-                                            "SYSTEM: You just promised to take action now (for example: \"I'll try/check now\"). " ++
-                        "Do it in this turn by issuing the appropriate tool call(s). " ++
-                        "If no tool can perform it, respond with a clear limitation now and do not promise another future attempt.")) });
+                        (if (is.force_follow_through) |ff| ff else "SYSTEM: You just promised to take action now (for example: \"I'll try/check now\"). " ++
+                            "Do it in this turn by issuing the appropriate tool call(s). " ++
+                            "If no tool can perform it, respond with a clear limitation now and do not promise another future attempt.")
+                    else
+                        "SYSTEM: You just promised to take action now (for example: \"I'll try/check now\"). " ++
+                            "Do it in this turn by issuing the appropriate tool call(s). " ++
+                            "If no tool can perform it, respond with a clear limitation now and do not promise another future attempt.")) });
                     self.trimHistory();
                     self.freeResponseFields(&response);
                     forced_follow_through_count += 1;
@@ -2741,6 +2755,16 @@ pub const Agent = struct {
                 w.flush() catch {};
             }
 
+            // Emit interim text via progress callback so channels (Telegram, etc.)
+            // can deliver it to the user. Unlike stdout above, this fires
+            // unconditionally — the text is content the user needs, not diagnostics.
+            if (display_text.len > 0 and parsed_calls.len > 0) {
+                log.info("interim_text emit len={d} calls={d}", .{ display_text.len, parsed_calls.len });
+                if (self.progress_callback) |cb| {
+                    if (self.progress_ctx) |pctx| cb(pctx, .{ .text = display_text, .kind = .interim_text });
+                }
+            }
+
             // Record assistant message with tool calls in history.
             // Native path (free_assistant_history=true): transfer ownership directly to avoid
             // a redundant allocation; clear the flag so the outer defer does not double-free.
@@ -2783,8 +2807,15 @@ pub const Agent = struct {
 
                 const tool_start_event = ObserverEvent{ .tool_call_start = .{ .tool = call.name } };
                 self.observer.recordEvent(&tool_start_event);
-                if (self.progress_callback) |cb| {
-                    if (self.progress_ctx) |pctx| cb(pctx, .{ .text = call.name });
+                if (self.verbose_level == .on or self.verbose_level == .full) {
+                    if (self.progress_callback) |cb| {
+                        if (self.progress_ctx) |pctx| {
+                            const args_preview = if (call.arguments_json.len > 100) call.arguments_json[0..100] else call.arguments_json;
+                            const label = std.fmt.allocPrint(std.heap.page_allocator, "{s}: {s}", .{ call.name, args_preview }) catch call.name;
+                            defer if (label.ptr != call.name.ptr) std.heap.page_allocator.free(label);
+                            cb(pctx, .{ .text = label, .kind = .tool_start });
+                        }
+                    }
                 }
 
                 const tool_timer = std_compat.time.milliTimestamp();
@@ -2871,10 +2902,7 @@ pub const Agent = struct {
         log.warn("Tool iterations exhausted ({d}/{d}), requesting summary", .{ self.max_tool_iterations, self.max_tool_iterations });
 
         // Append a pseudo-user message forcing a text-only summary
-        try self.history.append(self.allocator, .{
-            .role = .user,
-            .content = try self.allocator.dupe(u8, (if (self.injected_strings_cfg) |is| is.max_iterations else null) orelse "SYSTEM: You have reached the maximum number of tool iterations. You MUST NOT call any more tools. Summarize what you have accomplished so far and what remains to be done. Respond in the same language the user used.")
-        });
+        try self.history.append(self.allocator, .{ .role = .user, .content = try self.allocator.dupe(u8, (if (self.injected_strings_cfg) |is| is.max_iterations else null) orelse "SYSTEM: You have reached the maximum number of tool iterations. You MUST NOT call any more tools. Summarize what you have accomplished so far and what remains to be done. Respond in the same language the user used.") });
 
         // Build messages for the summary call
         const summary_messages = self.buildMessageSlice() catch {
