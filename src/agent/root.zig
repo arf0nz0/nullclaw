@@ -999,6 +999,18 @@ pub const Agent = struct {
         // Specific "let me <action-verb>" and "i'll/i will <action-verb>" phrases.
         // Kept as explicit verb+phrase pairs to avoid false-positives on conclusory
         // statements like "I'll note that…", "Let me know if…", or "I will summarize…".
+
+        // Hybrid guards: only match on short, declarative responses.
+        // Long responses (substantive explanations) and responses with
+        // question marks or code blocks are almost certainly explanations
+        // that quote trigger words, not bare action promises.
+        if (text.len > 200) return false;
+        if (std.mem.indexOfScalar(u8, text, '?') != null) return false;
+        if (std.mem.indexOfScalar(u8, text, '`') != null) return false;
+
+        // Specific "let me <action-verb>" and "i'll/i will <action-verb>" phrases.
+        // Kept as explicit verb+phrase pairs to avoid false-positives on conclusory
+        // statements like "I'll note that…", "Let me know if…", or "I will summarize…".
         const ascii_patterns = [_][]const u8{
             // try / retry / attempt
             "i'll try",
