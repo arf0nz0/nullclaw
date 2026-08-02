@@ -16,7 +16,7 @@ zig-pkg/
 *.a
 reference/
 workspace/
-
+.lean-ctx/
 result
 .direnv/
 .worktrees
