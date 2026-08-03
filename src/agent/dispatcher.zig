@@ -192,45 +192,56 @@ fn fmtBareName(out_buf: []u8, name: []const u8) []const u8 {
     return std.fmt.bufPrint(out_buf, "`{s}`", .{name}) catch return name;
 }
 
+/// Global fallback: tool name + raw JSON args in a triple-backtick code block.
+/// Shows raw JSON when specific arg extraction fails, so no tool call ever
+/// displays as a bare name with no context.
+fn fmtFallback(out_buf: []u8, name: []const u8, args_json: []const u8, cap: usize) []const u8 {
+    if (args_json.len == 0 or std.mem.eql(u8, args_json, "{}")) return fmtBareName(out_buf, name);
+    var json_buf: [256]u8 = undefined;
+    const json_trunc = truncateNatural(&json_buf, args_json, cap);
+    return std.fmt.bufPrint(out_buf, "`{s}`:\n```\n{s}\n```", .{ name, json_trunc }) catch return fmtBareName(out_buf, name);
+}
+
 /// Main smart tool display formatter.
 /// Matches known tool via endsWith/eqlIgnoreCase on the FULL tool name.
 /// Extracts relevant arg field. Writes formatted label into out_buf.
 /// Tool name is NEVER shortened — always passed through as-is.
 /// Name is wrapped in backticks (converted to <code> by Telegram markdown renderer).
-/// Falls back to bare tool name or raw JSON as needed.
+/// Args shown in triple-backtick code blocks (converted to <pre>) for consistency.
+/// Falls back to raw JSON in a code block, or bare tool name if no args exist.
 pub fn formatToolStartLabel(out_buf: []u8, tool_name: []const u8, args_json: []const u8) []const u8 {
     var unescape_buf: [512]u8 = undefined;
     const cap: usize = 250;
 
     if (std.mem.endsWith(u8, tool_name, "ctx_shell") or eqlIgnoreCase(tool_name, "shell")) {
         if (extractJsonString(args_json, "command", &unescape_buf)) |v| return fmtSimple(out_buf, tool_name, v, cap);
-        return fmtBareName(out_buf, tool_name);
+        return fmtFallback(out_buf, tool_name, args_json, cap);
     }
 
     if (std.mem.endsWith(u8, tool_name, "ctx_read") or eqlIgnoreCase(tool_name, "file_read")) {
         if (extractJsonString(args_json, "path", &unescape_buf)) |v| return fmtSimple(out_buf, tool_name, v, cap);
-        return fmtBareName(out_buf, tool_name);
+        return fmtFallback(out_buf, tool_name, args_json, cap);
     }
 
     if (std.mem.endsWith(u8, tool_name, "ctx_edit") or std.mem.endsWith(u8, tool_name, "ctx_patch") or eqlIgnoreCase(tool_name, "file_edit")) {
         if (extractJsonString(args_json, "path", &unescape_buf)) |v| return fmtSimple(out_buf, tool_name, v, cap);
-        return fmtBareName(out_buf, tool_name);
+        return fmtFallback(out_buf, tool_name, args_json, cap);
     }
 
     if (std.mem.endsWith(u8, tool_name, "ctx_search")) {
         if (extractJsonString(args_json, "pattern", &unescape_buf)) |v| return fmtSimple(out_buf, tool_name, v, cap);
         if (extractJsonString(args_json, "query", &unescape_buf)) |v| return fmtSimple(out_buf, tool_name, v, cap);
-        return fmtBareName(out_buf, tool_name);
+        return fmtFallback(out_buf, tool_name, args_json, cap);
     }
 
     if (std.mem.endsWith(u8, tool_name, "ctx_glob")) {
         if (extractJsonString(args_json, "pattern", &unescape_buf)) |v| return fmtSimple(out_buf, tool_name, v, cap);
-        return fmtBareName(out_buf, tool_name);
+        return fmtFallback(out_buf, tool_name, args_json, cap);
     }
 
     if (std.mem.endsWith(u8, tool_name, "ctx_tree") or std.mem.endsWith(u8, tool_name, "ctx_delta") or std.mem.endsWith(u8, tool_name, "ctx_outline")) {
         if (extractJsonString(args_json, "path", &unescape_buf)) |v| return fmtSimple(out_buf, tool_name, v, cap);
-        return fmtBareName(out_buf, tool_name);
+        return fmtFallback(out_buf, tool_name, args_json, cap);
     }
 
     if (std.mem.endsWith(u8, tool_name, "ctx_execute")) {
@@ -239,98 +250,95 @@ pub fn formatToolStartLabel(out_buf: []u8, tool_name: []const u8, args_json: []c
             if (extractJsonString(args_json, "code", &unescape2)) |code_val| {
                 var code_buf: [100]u8 = undefined;
                 const code_trunc = truncateNatural(&code_buf, code_val, 80);
-                return std.fmt.bufPrint(out_buf, "`{s}`: {s}: {s}", .{ tool_name, l, code_trunc }) catch return fmtBareName(out_buf, tool_name);
+                return std.fmt.bufPrint(out_buf, "`{s}`:\n```\n{s}: {s}\n```", .{ tool_name, l, code_trunc }) catch return fmtFallback(out_buf, tool_name, args_json, cap);
             }
             return fmtSimple(out_buf, tool_name, l, cap);
         }
-        return fmtBareName(out_buf, tool_name);
+        return fmtFallback(out_buf, tool_name, args_json, cap);
     }
 
     if (std.mem.endsWith(u8, tool_name, "ctx_url_read") or eqlIgnoreCase(tool_name, "web_fetch")) {
         if (extractJsonString(args_json, "url", &unescape_buf)) |v| return fmtSimple(out_buf, tool_name, v, cap);
-        return fmtBareName(out_buf, tool_name);
+        return fmtFallback(out_buf, tool_name, args_json, cap);
     }
 
     if (std.mem.endsWith(u8, tool_name, "ctx_compose")) {
         if (extractJsonString(args_json, "task", &unescape_buf)) |v| return fmtSimple(out_buf, tool_name, v, cap);
-        return fmtBareName(out_buf, tool_name);
+        return fmtFallback(out_buf, tool_name, args_json, cap);
     }
 
     if (std.mem.endsWith(u8, tool_name, "ctx_explore")) {
         if (extractJsonString(args_json, "query", &unescape_buf)) |v| return fmtSimple(out_buf, tool_name, v, cap);
-        return fmtBareName(out_buf, tool_name);
+        return fmtFallback(out_buf, tool_name, args_json, cap);
     }
 
     if (std.mem.endsWith(u8, tool_name, "ctx_knowledge")) {
         if (extractJsonString(args_json, "action", &unescape_buf)) |a| {
             var unescape2: [512]u8 = undefined;
             const detail = extractJsonString(args_json, "query", &unescape2) orelse extractJsonString(args_json, "key", &unescape2);
-            if (detail) |d| return std.fmt.bufPrint(out_buf, "`{s}`: {s} {s}", .{ tool_name, a, d }) catch return fmtBareName(out_buf, tool_name);
+            if (detail) |d| return std.fmt.bufPrint(out_buf, "`{s}`:\n```\n{s} {s}\n```", .{ tool_name, a, d }) catch return fmtFallback(out_buf, tool_name, args_json, cap);
             return fmtSimple(out_buf, tool_name, a, cap);
         }
-        return fmtBareName(out_buf, tool_name);
+        return fmtFallback(out_buf, tool_name, args_json, cap);
     }
 
     if (std.mem.endsWith(u8, tool_name, "ctx_expand")) {
         if (extractJsonString(args_json, "id", &unescape_buf)) |v| return fmtSimple(out_buf, tool_name, v, cap);
         if (extractJsonString(args_json, "search", &unescape_buf)) |v| return fmtSimple(out_buf, tool_name, v, cap);
-        return fmtBareName(out_buf, tool_name);
+        return fmtFallback(out_buf, tool_name, args_json, cap);
     }
 
     if (eqlIgnoreCase(tool_name, "memory_store")) {
         if (extractJsonString(args_json, "key", &unescape_buf)) |v| return fmtSimple(out_buf, tool_name, v, cap);
-        return fmtBareName(out_buf, tool_name);
+        return fmtFallback(out_buf, tool_name, args_json, cap);
     }
 
     if (eqlIgnoreCase(tool_name, "memory_recall")) {
         if (extractJsonString(args_json, "query", &unescape_buf)) |v| return fmtSimple(out_buf, tool_name, v, cap);
-        return fmtBareName(out_buf, tool_name);
+        return fmtFallback(out_buf, tool_name, args_json, cap);
     }
 
     if (eqlIgnoreCase(tool_name, "memory_forget")) {
         if (extractJsonString(args_json, "key", &unescape_buf)) |v| return fmtSimple(out_buf, tool_name, v, cap);
-        return fmtBareName(out_buf, tool_name);
+        return fmtFallback(out_buf, tool_name, args_json, cap);
     }
 
     if (eqlIgnoreCase(tool_name, "spawn")) {
         if (extractJsonString(args_json, "label", &unescape_buf)) |v| return fmtSimple(out_buf, tool_name, v, cap);
         if (extractJsonString(args_json, "task", &unescape_buf)) |v| return fmtSimple(out_buf, tool_name, v, cap);
-        return fmtBareName(out_buf, tool_name);
+        return fmtFallback(out_buf, tool_name, args_json, cap);
     }
 
     if (eqlIgnoreCase(tool_name, "delegate")) {
         if (extractJsonString(args_json, "task", &unescape_buf)) |v| return fmtSimple(out_buf, tool_name, v, cap);
-        return fmtBareName(out_buf, tool_name);
+        return fmtFallback(out_buf, tool_name, args_json, cap);
     }
 
     if (eqlIgnoreCase(tool_name, "schedule")) {
         if (extractJsonString(args_json, "command", &unescape_buf)) |v| return fmtSimple(out_buf, tool_name, v, cap);
         if (extractJsonString(args_json, "prompt", &unescape_buf)) |v| return fmtSimple(out_buf, tool_name, v, cap);
-        return fmtBareName(out_buf, tool_name);
+        return fmtFallback(out_buf, tool_name, args_json, cap);
     }
 
     if (eqlIgnoreCase(tool_name, "pushover")) {
         if (extractJsonString(args_json, "title", &unescape_buf)) |v| return fmtSimple(out_buf, tool_name, v, cap);
         if (extractJsonString(args_json, "message", &unescape_buf)) |v| return fmtSimple(out_buf, tool_name, v, cap);
-        return fmtBareName(out_buf, tool_name);
+        return fmtFallback(out_buf, tool_name, args_json, cap);
     }
 
     if (eqlIgnoreCase(tool_name, "web_search")) {
         if (extractJsonString(args_json, "query", &unescape_buf)) |v| return fmtSimple(out_buf, tool_name, v, cap);
-        return fmtBareName(out_buf, tool_name);
+        return fmtFallback(out_buf, tool_name, args_json, cap);
     }
 
-    // Unknown tool fallback: tool name + raw JSON, 250 char cap
-    if (args_json.len == 0 or std.mem.eql(u8, args_json, "{}")) return fmtBareName(out_buf, tool_name);
-    var json_buf: [256]u8 = undefined;
-    const json_trunc = truncateNatural(&json_buf, args_json, cap);
-    return std.fmt.bufPrint(out_buf, "`{s}`: {s}", .{ tool_name, json_trunc }) catch return fmtBareName(out_buf, tool_name);
+    // Unknown tool fallback: tool name + raw JSON in code block
+    return fmtFallback(out_buf, tool_name, args_json, cap);
 }
 
 fn fmtSimple(out_buf: []u8, name: []const u8, value: []const u8, cap: usize) []const u8 {
     var value_buf: [256]u8 = undefined;
     const trunc = truncateNatural(&value_buf, value, cap);
-    return std.fmt.bufPrint(out_buf, "`{s}`: {s}", .{ name, trunc }) catch return name;
+    return std.fmt.bufPrint(out_buf, "`{s}`:\n```\n{s}\n```", .{ name, trunc }) catch return name;
 }
 
 fn eqlIgnoreCase(a: []const u8, b: []const u8) bool {
