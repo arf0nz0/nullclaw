@@ -188,43 +188,43 @@ pub fn truncateNatural(out_buf: []u8, body: []const u8, cap: usize) []const u8 {
 }
 
 /// Main smart tool display formatter.
-/// Strips MCP prefix, matches known tool, extracts relevant arg field.
+/// Matches known tool (via stripped name), extracts relevant arg field.
 /// Writes formatted label into out_buf (e.g. "shell: ls -la"), returns slice.
-/// Falls back to bare stripped name or raw JSON as needed.
+/// Falls back to bare tool name or raw JSON as needed. Tool name is NEVER shortened.
 pub fn formatToolStartLabel(out_buf: []u8, tool_name: []const u8, args_json: []const u8) []const u8 {
     const short = stripMcpPrefix(tool_name);
     var unescape_buf: [512]u8 = undefined;
     const cap: usize = 250;
 
     if (eqlIgnoreCase(short, "ctx_shell") or eqlIgnoreCase(short, "shell")) {
-        if (extractJsonString(args_json, "command", &unescape_buf)) |v| return fmtSimple(out_buf, short, v, cap);
-        return short;
+        if (extractJsonString(args_json, "command", &unescape_buf)) |v| return fmtSimple(out_buf, tool_name, v, cap);
+        return tool_name;
     }
 
     if (eqlIgnoreCase(short, "ctx_read") or eqlIgnoreCase(short, "file_read")) {
-        if (extractJsonString(args_json, "path", &unescape_buf)) |v| return fmtSimple(out_buf, short, v, cap);
-        return short;
+        if (extractJsonString(args_json, "path", &unescape_buf)) |v| return fmtSimple(out_buf, tool_name, v, cap);
+        return tool_name;
     }
 
     if (eqlIgnoreCase(short, "ctx_edit") or eqlIgnoreCase(short, "ctx_patch") or eqlIgnoreCase(short, "file_edit")) {
-        if (extractJsonString(args_json, "path", &unescape_buf)) |v| return fmtSimple(out_buf, short, v, cap);
-        return short;
+        if (extractJsonString(args_json, "path", &unescape_buf)) |v| return fmtSimple(out_buf, tool_name, v, cap);
+        return tool_name;
     }
 
     if (eqlIgnoreCase(short, "ctx_search")) {
-        if (extractJsonString(args_json, "pattern", &unescape_buf)) |v| return fmtSimple(out_buf, short, v, cap);
-        if (extractJsonString(args_json, "query", &unescape_buf)) |v| return fmtSimple(out_buf, short, v, cap);
-        return short;
+        if (extractJsonString(args_json, "pattern", &unescape_buf)) |v| return fmtSimple(out_buf, tool_name, v, cap);
+        if (extractJsonString(args_json, "query", &unescape_buf)) |v| return fmtSimple(out_buf, tool_name, v, cap);
+        return tool_name;
     }
 
     if (eqlIgnoreCase(short, "ctx_glob")) {
-        if (extractJsonString(args_json, "pattern", &unescape_buf)) |v| return fmtSimple(out_buf, short, v, cap);
-        return short;
+        if (extractJsonString(args_json, "pattern", &unescape_buf)) |v| return fmtSimple(out_buf, tool_name, v, cap);
+        return tool_name;
     }
 
     if (eqlIgnoreCase(short, "ctx_tree") or eqlIgnoreCase(short, "ctx_delta") or eqlIgnoreCase(short, "ctx_outline")) {
-        if (extractJsonString(args_json, "path", &unescape_buf)) |v| return fmtSimple(out_buf, short, v, cap);
-        return short;
+        if (extractJsonString(args_json, "path", &unescape_buf)) |v| return fmtSimple(out_buf, tool_name, v, cap);
+        return tool_name;
     }
 
     if (eqlIgnoreCase(short, "ctx_execute")) {
@@ -233,96 +233,96 @@ pub fn formatToolStartLabel(out_buf: []u8, tool_name: []const u8, args_json: []c
             if (extractJsonString(args_json, "code", &unescape2)) |code_val| {
                 var code_buf: [100]u8 = undefined;
                 const code_trunc = truncateNatural(&code_buf, code_val, 80);
-                return std.fmt.bufPrint(out_buf, "{s}: {s}: {s}", .{ short, l, code_trunc }) catch return short;
+                return std.fmt.bufPrint(out_buf, "{s}: {s}: {s}", .{ tool_name, l, code_trunc }) catch return tool_name;
             }
-            return fmtSimple(out_buf, short, l, cap);
+            return fmtSimple(out_buf, tool_name, l, cap);
         }
-        return short;
+        return tool_name;
     }
 
     if (eqlIgnoreCase(short, "ctx_url_read") or eqlIgnoreCase(short, "web_fetch")) {
-        if (extractJsonString(args_json, "url", &unescape_buf)) |v| return fmtSimple(out_buf, short, v, cap);
-        return short;
+        if (extractJsonString(args_json, "url", &unescape_buf)) |v| return fmtSimple(out_buf, tool_name, v, cap);
+        return tool_name;
     }
 
     if (eqlIgnoreCase(short, "ctx_compose")) {
-        if (extractJsonString(args_json, "task", &unescape_buf)) |v| return fmtSimple(out_buf, short, v, cap);
-        return short;
+        if (extractJsonString(args_json, "task", &unescape_buf)) |v| return fmtSimple(out_buf, tool_name, v, cap);
+        return tool_name;
     }
 
     if (eqlIgnoreCase(short, "ctx_explore")) {
-        if (extractJsonString(args_json, "query", &unescape_buf)) |v| return fmtSimple(out_buf, short, v, cap);
-        return short;
+        if (extractJsonString(args_json, "query", &unescape_buf)) |v| return fmtSimple(out_buf, tool_name, v, cap);
+        return tool_name;
     }
 
     if (eqlIgnoreCase(short, "ctx_knowledge")) {
         if (extractJsonString(args_json, "action", &unescape_buf)) |a| {
             var unescape2: [512]u8 = undefined;
             const detail = extractJsonString(args_json, "query", &unescape2) orelse extractJsonString(args_json, "key", &unescape2);
-            if (detail) |d| return std.fmt.bufPrint(out_buf, "{s}: {s} {s}", .{ short, a, d }) catch return short;
-            return fmtSimple(out_buf, short, a, cap);
+            if (detail) |d| return std.fmt.bufPrint(out_buf, "{s}: {s} {s}", .{ tool_name, a, d }) catch return tool_name;
+            return fmtSimple(out_buf, tool_name, a, cap);
         }
-        return short;
+        return tool_name;
     }
 
     if (eqlIgnoreCase(short, "ctx_expand")) {
-        if (extractJsonString(args_json, "id", &unescape_buf)) |v| return fmtSimple(out_buf, short, v, cap);
-        if (extractJsonString(args_json, "search", &unescape_buf)) |v| return fmtSimple(out_buf, short, v, cap);
-        return short;
+        if (extractJsonString(args_json, "id", &unescape_buf)) |v| return fmtSimple(out_buf, tool_name, v, cap);
+        if (extractJsonString(args_json, "search", &unescape_buf)) |v| return fmtSimple(out_buf, tool_name, v, cap);
+        return tool_name;
     }
 
     if (eqlIgnoreCase(short, "memory_store")) {
-        if (extractJsonString(args_json, "key", &unescape_buf)) |v| return fmtSimple(out_buf, short, v, cap);
-        return short;
+        if (extractJsonString(args_json, "key", &unescape_buf)) |v| return fmtSimple(out_buf, tool_name, v, cap);
+        return tool_name;
     }
 
     if (eqlIgnoreCase(short, "memory_recall")) {
-        if (extractJsonString(args_json, "query", &unescape_buf)) |v| return fmtSimple(out_buf, short, v, cap);
-        return short;
+        if (extractJsonString(args_json, "query", &unescape_buf)) |v| return fmtSimple(out_buf, tool_name, v, cap);
+        return tool_name;
     }
 
     if (eqlIgnoreCase(short, "memory_forget")) {
-        if (extractJsonString(args_json, "key", &unescape_buf)) |v| return fmtSimple(out_buf, short, v, cap);
-        return short;
+        if (extractJsonString(args_json, "key", &unescape_buf)) |v| return fmtSimple(out_buf, tool_name, v, cap);
+        return tool_name;
     }
 
     if (eqlIgnoreCase(short, "spawn")) {
-        if (extractJsonString(args_json, "label", &unescape_buf)) |v| return fmtSimple(out_buf, short, v, cap);
-        if (extractJsonString(args_json, "task", &unescape_buf)) |v| return fmtSimple(out_buf, short, v, cap);
-        return short;
+        if (extractJsonString(args_json, "label", &unescape_buf)) |v| return fmtSimple(out_buf, tool_name, v, cap);
+        if (extractJsonString(args_json, "task", &unescape_buf)) |v| return fmtSimple(out_buf, tool_name, v, cap);
+        return tool_name;
     }
 
     if (eqlIgnoreCase(short, "delegate")) {
-        if (extractJsonString(args_json, "task", &unescape_buf)) |v| return fmtSimple(out_buf, short, v, cap);
-        return short;
+        if (extractJsonString(args_json, "task", &unescape_buf)) |v| return fmtSimple(out_buf, tool_name, v, cap);
+        return tool_name;
     }
 
     if (eqlIgnoreCase(short, "schedule")) {
-        if (extractJsonString(args_json, "command", &unescape_buf)) |v| return fmtSimple(out_buf, short, v, cap);
-        if (extractJsonString(args_json, "prompt", &unescape_buf)) |v| return fmtSimple(out_buf, short, v, cap);
-        return short;
+        if (extractJsonString(args_json, "command", &unescape_buf)) |v| return fmtSimple(out_buf, tool_name, v, cap);
+        if (extractJsonString(args_json, "prompt", &unescape_buf)) |v| return fmtSimple(out_buf, tool_name, v, cap);
+        return tool_name;
     }
 
     if (eqlIgnoreCase(short, "pushover")) {
-        if (extractJsonString(args_json, "title", &unescape_buf)) |v| return fmtSimple(out_buf, short, v, cap);
-        if (extractJsonString(args_json, "message", &unescape_buf)) |v| return fmtSimple(out_buf, short, v, cap);
-        return short;
+        if (extractJsonString(args_json, "title", &unescape_buf)) |v| return fmtSimple(out_buf, tool_name, v, cap);
+        if (extractJsonString(args_json, "message", &unescape_buf)) |v| return fmtSimple(out_buf, tool_name, v, cap);
+        return tool_name;
     }
 
     if (eqlIgnoreCase(short, "web_search")) {
-        if (extractJsonString(args_json, "query", &unescape_buf)) |v| return fmtSimple(out_buf, short, v, cap);
-        return short;
+        if (extractJsonString(args_json, "query", &unescape_buf)) |v| return fmtSimple(out_buf, tool_name, v, cap);
+        return tool_name;
     }
 
     // Unknown tool fallback: raw JSON, 250 char cap
-    if (args_json.len == 0 or std.mem.eql(u8, args_json, "{}")) return short;
+    if (args_json.len == 0 or std.mem.eql(u8, args_json, "{}")) return tool_name;
     return truncateNatural(out_buf, args_json, cap);
 }
 
-fn fmtSimple(out_buf: []u8, short: []const u8, value: []const u8, cap: usize) []const u8 {
+fn fmtSimple(out_buf: []u8, name: []const u8, value: []const u8, cap: usize) []const u8 {
     var value_buf: [256]u8 = undefined;
     const trunc = truncateNatural(&value_buf, value, cap);
-    return std.fmt.bufPrint(out_buf, "{s}: {s}", .{ short, trunc }) catch return short;
+    return std.fmt.bufPrint(out_buf, "{s}: {s}", .{ name, trunc }) catch return name;
 }
 
 fn eqlIgnoreCase(a: []const u8, b: []const u8) bool {
