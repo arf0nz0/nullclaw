@@ -59,6 +59,18 @@ pub fn stripToolResultMarkup(allocator: std.mem.Allocator, input: []const u8) ![
     return bracket_stripped;
 }
 
+pub fn stripToolCallMarkup(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
+    const xml = try stripDelimitedBlocks(allocator, input, "<tool_call>", "</tool_call>");
+    defer allocator.free(xml);
+    const bu = try stripDelimitedBlocks(allocator, xml, "[TOOL_CALL]", "[/TOOL_CALL]");
+    defer allocator.free(bu);
+    const bracket_lower = try stripDelimitedBlocks(allocator, bu, "[tool_call]", "[/tool_call]");
+    defer allocator.free(bracket_lower);
+    const nc = try stripDelimitedBlocks(allocator, bracket_lower, "<nc_choices>", "</nc_choices>");
+    defer allocator.free(nc);
+    return try stripDelimitedBlocks(allocator, nc, "<nc_choices", "</nc_choices>");
+}
+
 /// Result of executing a single tool.
 pub const ToolExecutionResult = struct {
     name: []const u8,
@@ -110,7 +122,9 @@ pub fn containsToolCallMarkup(text: []const u8) bool {
         std.mem.indexOf(u8, text, "[TOOL_CALL]") != null or
         std.mem.indexOf(u8, text, "[tool_call]") != null or
         std.mem.indexOf(u8, text, "[/TOOL_CALL]") != null or
-        std.mem.indexOf(u8, text, "[/tool_call]") != null;
+        std.mem.indexOf(u8, text, "[/tool_call]") != null or
+        std.mem.indexOf(u8, text, "<nc_choices>") != null or
+        std.mem.indexOf(u8, text, "</nc_choices>") != null;
 }
 
 /// Parse tool calls from an LLM response using XML-style `<tool_call>` tags.

@@ -981,17 +981,9 @@ pub const Agent = struct {
 
     fn selectDisplayText(response_text: []const u8, parsed_text: []const u8, parsed_calls_len: usize) []const u8 {
         if (parsed_calls_len > 0) return parsed_text;
-        if (parsed_text.len > 0) {
-            // When no valid tool calls were parsed, any tool-call markup in
-            // parsed_text is literal prose references or malformed attempts.
-            // Show the full response rather than silently truncating content.
-            // (Previous behaviour returned "" here, causing 1400+ byte truncation
-            // when the model mentioned tool-call tags in explanatory prose.)
-            if (dispatcher.containsToolCallMarkup(parsed_text)) return response_text;
-            return parsed_text;
-        }
-        // parsed_text empty: if markup exists but no calls extracted, it's
-        // literal references in prose — show full response, don't blank it.
+        // No valid calls parsed. Return best available text — markup stripping
+        // happens at the call site where an allocator is available.
+        if (parsed_text.len > 0) return parsed_text;
         return response_text;
     }
 
@@ -2614,9 +2606,20 @@ pub const Agent = struct {
 
             // Determine display text.
             // When tool calls are present, only show parsed plain text (if any).
-            // Never fall back to raw response_text here, otherwise markup like
-            // <tool_call>...</tool_call> can leak to users.
-            const display_text = selectDisplayText(response_text, parsed_text, parsed_calls.len);
+            // When no valid calls parsed, strip any malformed/orphaned markup
+            // (tool_call, nc_choices) so raw tags never leak to users.
+            var display_text_owned: bool = false;
+            const display_text = blk: {
+                const selected = selectDisplayText(response_text, parsed_text, parsed_calls.len);
+                if (parsed_calls.len == 0 and dispatcher.containsToolCallMarkup(selected)) {
+                    if (dispatcher.stripToolCallMarkup(self.allocator, selected)) |stripped| {
+                        display_text_owned = true;
+                        break :blk stripped;
+                    } else |_| {}
+                }
+                break :blk selected;
+            };
+            defer if (display_text_owned) self.allocator.free(display_text);
 
             if (parsed_calls.len == 0) {
                 const trimmed_display_text = std.mem.trim(u8, display_text, " \t\r\n");
@@ -9872,21 +9875,23 @@ test "Agent shouldForceActionFollowThrough ignores normal final answer" {
     try std.testing.expect(!Agent.shouldForceActionFollowThrough("I cannot do that in this environment."));
 }
 
-test "Agent selectDisplayText hides malformed tool markup payload" {
+test "Agent selectDisplayText returns text when markup present (stripping at call site)" {
     const raw = "<tool_call>web_search<arg_key>query</arg_key><arg_value>x</arg_value></tool_call>";
     const selected = Agent.selectDisplayText(raw, "", 0);
-    try std.testing.expectEqualStrings("", selected);
+    // selectDisplayText no longer suppresses; stripping happens at the call site.
+    try std.testing.expectEqualStrings(raw, selected);
 }
 
-test "Agent selectDisplayText hides orphan closing tool_call tag" {
-    // Model emits </tool_call> without an opener — must not leak to user.
+test "Agent selectDisplayText returns text with orphan closing tag (stripping at call site)" {
+    // Model emits </tool_call> without an opener — selectDisplayText returns
+    // the text as-is; stripping happens at the call site.
     const raw = "Here are the results:\n</tool_call>\nSome reply";
     const selected = Agent.selectDisplayText(raw, "", 0);
-    try std.testing.expectEqualStrings("", selected);
+    try std.testing.expectEqualStrings(raw, selected);
 
     const bracket_raw = "Here are the results:\n[/tool_call]\nSome reply";
     const bracket_selected = Agent.selectDisplayText(bracket_raw, "", 0);
-    try std.testing.expectEqualStrings("", bracket_selected);
+    try std.testing.expectEqualStrings(bracket_raw, bracket_selected);
 }
 
 test "Agent selectDisplayText keeps plain text when no markup exists" {
@@ -9900,10 +9905,11 @@ test "Agent selectDisplayText prefers parsed text when present" {
     try std.testing.expectEqualStrings("let me check", selected);
 }
 
-test "Agent selectDisplayText hides malformed tool markup present in parsed text" {
+test "Agent selectDisplayText returns text when parsed text has markup (stripping at call site)" {
     const parsed_with_markup = "Some text <tool_call>{\"name\":\"shell\"";
     const selected = Agent.selectDisplayText(parsed_with_markup, parsed_with_markup, 0);
-    try std.testing.expectEqualStrings("", selected);
+    // selectDisplayText returns best text as-is; stripping happens at the call site.
+    try std.testing.expectEqualStrings(parsed_with_markup, selected);
 }
 
 test "Agent retries empty final response once before succeeding" {
