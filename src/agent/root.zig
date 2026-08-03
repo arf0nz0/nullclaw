@@ -2825,10 +2825,9 @@ pub const Agent = struct {
                 if (self.verbose_level == .on or self.verbose_level == .full) {
                     if (self.progress_callback) |cb| {
                         if (self.progress_ctx) |pctx| {
-                            const args_preview = if (call.arguments_json.len > 100) call.arguments_json[0..100] else call.arguments_json;
-                            const label = std.fmt.allocPrint(std.heap.page_allocator, "{s}: {s}", .{ call.name, args_preview }) catch call.name;
-                            defer if (label.ptr != call.name.ptr) std.heap.page_allocator.free(label);
-                            cb(pctx, .{ .text = label, .kind = .tool_start });
+                            var label_buf: [320]u8 = undefined;
+                            const smart_label = dispatcher.formatToolStartLabel(&label_buf, call.name, call.arguments_json);
+                            cb(pctx, .{ .text = smart_label, .kind = .tool_start });
                         }
                     }
                 }
