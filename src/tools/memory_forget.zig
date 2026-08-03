@@ -31,10 +31,13 @@ pub const MemoryForgetTool = struct {
         const key = root.getString(args, "key") orelse
             return ToolResult.fail("Missing 'key' parameter");
         if (key.len == 0) return ToolResult.fail("'key' must not be empty");
-        const session_id = if (root.getString(args, "session_id")) |sid_raw|
-            if (sid_raw.len > 0) sid_raw else root.threadMemorySessionId()
+        // If no explicit session_id is provided, use null so that global/core
+        // entries (stored with session_id IS NULL) can be matched and deleted.
+        // Forcing a non-null default here would prevent forgetting core entries.
+        const session_id: ?[]const u8 = if (root.getString(args, "session_id")) |sid_raw|
+            if (sid_raw.len > 0) sid_raw else null
         else
-            root.threadMemorySessionId();
+            null;
 
         const m = self.memory orelse {
             const msg = try std.fmt.allocPrint(allocator, "Memory backend not configured. Cannot forget: {s}", .{key});
