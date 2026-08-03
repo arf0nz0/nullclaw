@@ -324,7 +324,7 @@ pub fn formatToolStartLabel(out_buf: []u8, tool_name: []const u8, args_json: []c
     if (args_json.len == 0 or std.mem.eql(u8, args_json, "{}")) return fmtBareName(out_buf, tool_name);
     var json_buf: [256]u8 = undefined;
     const json_trunc = truncateNatural(&json_buf, args_json, cap);
-    return std.fmt.bufPrint(out_buf, "`{s}` {s}", .{ tool_name, json_trunc }) catch return fmtBareName(out_buf, tool_name);
+    return std.fmt.bufPrint(out_buf, "`{s}`: {s}", .{ tool_name, json_trunc }) catch return fmtBareName(out_buf, tool_name);
 }
 
 fn fmtSimple(out_buf: []u8, name: []const u8, value: []const u8, cap: usize) []const u8 {
